@@ -25,7 +25,7 @@ class Entreprise(models.Model):
     numero = models.CharField(max_length=20)
     pays = models.CharField(max_length=100, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
-
+    ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
     libelle = models.TextField(blank=True, null=True)
 
     image = models.ImageField(null=True, blank=True, upload_to=get_facture_upload_to)
@@ -42,6 +42,17 @@ class Entreprise(models.Model):
     def assign_to_user(self, utilisateur):
         """Attribue cette entreprise à un utilisateur donné"""
         self.utilisateurs.add(utilisateur)
+
+    def save(self, *args, **kwargs):
+
+        if not self.ref:
+            self.ref = self.generate_unique_code()
+        super(Entreprise, self).save(*args, **kwargs)
+
+    def generate_unique_code(self):
+        date_str = datetime.datetime.now().strftime("%d%m%Y")
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        return f"{date_str}{random_str}"
 
 
 class PaiementEntreprise(models.Model):
@@ -176,12 +187,13 @@ class Depense(models.Model):
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
 
     libelle = models.CharField(max_length=200, null=True, blank=True)
-    somme = models.IntegerField(default=0)
+    # somme = models.IntegerField(default=0)
+    somme = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     facture = models.FileField(null=True, blank=True, upload_to=get_facture_upload_to)
 
     slug = models.SlugField(editable=False, blank=True)
-
-    date = models.DateTimeField(auto_now_add=True, null=True)
+    date = models.DateTimeField(null=True, blank=True)
+    # date = models.DateTimeField(auto_now_add=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
@@ -217,10 +229,12 @@ class Entrer(models.Model):
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
     libelle = models.CharField(max_length=200, null=False)
     qte = models.IntegerField(default=0)
-    pu = models.IntegerField(default=0)
+    pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # pu = models.IntegerField(default=0)
 
     # Champ booléen pour déterminer si on doit cumuler ou non la quantité
     cumuler_quantite = models.BooleanField(default=False)
+    is_sortie = models.BooleanField(default=True, null=False, blank=False)
 
     slug = models.SlugField(editable=False, blank=True)
 
@@ -266,6 +280,16 @@ class Entrer(models.Model):
             dernier_produit.save()
 
             # Crée un historique pour la mise à jour du dernier produit
+            # HistoriqueEntrer.objects.create(
+            #     entrer=dernier_produit,
+            #     ref=self.ref,
+            #     libelle=f"Produit modifié par {user.first_name} {user.last_name}" if user else "Produit modifié",
+            #     categorie=self.souscategorie.libelle,
+            #     qte=self.qte,
+            #     pu=self.pu,
+            #     date=self.date,
+            #     action="updated"  # Indique que la quantité a été mise à jour
+            # )
             HistoriqueEntrer.objects.create(
                 entrer=dernier_produit,
                 ref=self.ref,
@@ -274,7 +298,8 @@ class Entrer(models.Model):
                 qte=self.qte,
                 pu=self.pu,
                 date=self.date,
-                action="updated"  # Indique que la quantité a été mise à jour
+                action="updated",
+                reference=self.generate_unique_code()  # Ajoutez une référence unique ici
             )
 
             # Retourner ici pour éviter de créer un nouvel enregistrement d'inventaire
@@ -292,7 +317,7 @@ class Entrer(models.Model):
             HistoriqueEntrer.objects.create(
                 entrer=self,
                 ref=self.ref,
-                libelle=f"Produit ajouté par {user.first_name} {user.last_name}" if user else "Produit ajouté",
+                libelle=f"Produit ajouté par {user.first_name} {user.last_name}" if user else "Produit Mis a jour",
                 categorie=f"{self.souscategorie.libelle} ({self.libelle})",
                 qte=self.qte,
                 pu=self.pu,
@@ -363,7 +388,8 @@ class HistoriqueEntrer(models.Model):
     entrer = models.ForeignKey(Entrer, on_delete=models.SET_NULL, null=True, blank=True)
     ref = models.CharField(max_length=150)
     qte = models.IntegerField()
-    pu = models.IntegerField()
+    pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    reference = models.CharField(max_length=150, unique=True, null=False, blank=False)
     date = models.DateTimeField(null=True, blank=True)
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
     libelle = models.CharField(max_length=150, null=True, blank=True)  # "created", "updated", "deleted"
@@ -376,6 +402,23 @@ class HistoriqueEntrer(models.Model):
     def __str__(self):
         return f"Historique de {self.ref} - {self.action}"
 
+    def save(self, *args, **kwargs):
+        # Assurez-vous que `reference` est unique
+        if not self.reference:
+            self.reference = self.generate_unique_code()
+
+            # Vérifiez l'unicité dans la base de données
+            while HistoriqueEntrer.objects.filter(reference=self.reference).exists():
+                self.reference = self.generate_unique_code()
+
+        # Sauvegarde initiale
+        super(HistoriqueEntrer, self).save(*args, **kwargs)
+
+    def generate_unique_code(self):
+        date_str = datetime.datetime.now().strftime("%d%m%Y%H%M%S%f")  # Inclut les microsecondes
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        return f"{date_str}{random_str}"
+
 
 class Sortie(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -384,7 +427,7 @@ class Sortie(models.Model):
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
 
     qte = models.IntegerField(default=0)
-    pu = models.IntegerField(default=0)
+    pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     slug = models.SlugField(editable=False, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -462,7 +505,7 @@ class HistoriqueSortie(models.Model):
     sortie = models.ForeignKey(Sortie, on_delete=models.SET_NULL, null=True, blank=True)
     ref = models.CharField(max_length=150)
     qte = models.IntegerField()
-    pu = models.IntegerField()
+    pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
     libelle = models.CharField(max_length=150, null=True, blank=True)
     categorie = models.CharField(max_length=150, null=True, blank=True)
@@ -473,6 +516,19 @@ class HistoriqueSortie(models.Model):
 
     def __str__(self):
         return f"Historique de {self.sortie.ref} - {self.action}"
+
+    def save(self, *args, user=None, **kwargs):
+        # Générer une référence unique s'il n'y en a pas
+        if not self.ref:
+            self.ref = self.generate_unique_code()
+
+        # Sauvegarde initiale du stock
+        super(HistoriqueSortie, self).save(*args, **kwargs)
+
+    def generate_unique_code(self):
+        date_str = datetime.datetime.now().strftime("%d%m%Y")
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        return f"{date_str}{random_str}"
 
 
 class FactEntre(models.Model):

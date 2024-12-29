@@ -125,6 +125,8 @@ def get_entreprise_un(request, uuid):
             "uuid": entreprise.uuid,
             "nom": entreprise.nom,
             "adresse": entreprise.adresse,
+            "libelle": entreprise.libelle,
+            "ref": entreprise.ref,
             "email": entreprise.email,
             "pays": entreprise.pays,
             "coordonne": entreprise.coordonne,
@@ -240,7 +242,7 @@ def del_entreprise(request):
         # Vérifier les utilisateurs associés
         if utilisateurs.exists():
             response_data[
-                "message"] = f"Impossible de supprimer : cette entreprise est liée à {utilisateurs.count()} utilisateur(s)."
+                "message"] = f"Impossible de supprimer : cette entreprise possède {utilisateurs.count()} utilisateur(s)."
             return JsonResponse(response_data)
 
         # Si aucune dépendance, supprimer l'entreprise
@@ -342,6 +344,8 @@ def get_entreprise(request):
                                     "id": c.id,
                                     "nom": c.nom,
                                     "adresse": c.adresse,
+                                    "libelle": c.libelle,
+                                    "ref": c.ref,
                                     "email": c.email,
                                     "numero": c.numero,
                                     # "categorie_count": c.categorie.count(),
@@ -412,6 +416,11 @@ def set_entreprise(request):
                         adresse = form.get("adresse")
                         if adresse:
                             categorie_from_database.adresse = adresse
+                            modifier = True
+
+                        libelle = form.get("libelle")
+                        if libelle:
+                            categorie_from_database.libelle = libelle
                             modifier = True
 
                         numero = form.get("numero")
@@ -493,9 +502,11 @@ def get_utilisateur_entreprise(request, uuid):
                 "uuid": entreprise.uuid,
                 "nom": entreprise.nom,
                 "adresse": entreprise.adresse,
+                "ref": entreprise.ref,
                 "numero": entreprise.numero,
                 "email": entreprise.email,
                 "coordonne": entreprise.coordonne,
+                "libelle": entreprise.libelle,
                 "image": entreprise.image.url if entreprise.image else None,
                 # livre.facture.url if livre.facture else None
                 **licence_data  # Ajouter les informations de la licence
@@ -537,6 +548,8 @@ def get_entreprise_utilisateurs(request, uuid):
             {
                 "id": utilisateur.id,
                 "uuid": utilisateur.uuid,
+                "ref": utilisateur.ref,
+                "libelle": utilisateur.relibellef,
                 "username": utilisateur.username,
                 "email": utilisateur.email,
                 "first_name": utilisateur.first_name,
@@ -1963,6 +1976,7 @@ def add_depense(request):
         somme = form.get("somme")
         date = form.get("date")
         admin_id = form.get("user_id")
+        print(form)
 
         if admin_id:
 
@@ -2217,7 +2231,7 @@ def get_depenses_entreprise(request, uuid, entreprise_id):
                 "slug": dep.slug,
                 "libelle": dep.libelle,
                 "somme": dep.somme,
-                "date": dep.created_at.strftime("%Y-%m-%d"),
+                "date": dep.date.strftime("%Y-%m-%d"),
             }
             for dep in depenses
         ]
@@ -2255,6 +2269,7 @@ def add_entre(request):
         date = form.get("date")
         admin_id = form.get("user_id")
         cumuler_quantite = form.get("cumuler_quantite")
+        is_sortie = form.get("is_sortie")
         categorie_slug = form.get("categorie_slug")
         client_id = form.get("client_id")
         user = request.user
@@ -2273,6 +2288,7 @@ def add_entre(request):
                             libelle=libelle,
                             date=date,
                             cumuler_quantite=cumuler_quantite,
+                            is_sortie=is_sortie,
                             souscategorie=categorie
                         )
 
@@ -2490,6 +2506,10 @@ def set_entre(request):
                         livre_from_database.pu = form["pu"]
                         modifier = True
 
+                    if "is_sortie" in form:
+                        livre_from_database.is_sortie = form["is_sortie"]
+                        modifier = True
+
                     if "libelle" in form:
                         livre_from_database.libelle = form["libelle"]
                         modifier = True
@@ -2604,7 +2624,7 @@ def get_entre_un(request, uuid):
             "pu": livre.pu,
             "qte": livre.qte,
             "image": livre.souscategorie.image.url if livre.souscategorie.image else None,
-            "categorie_slug": livre.souscategorie.slug,
+            "categorie_slug": livre.souscategorie.libelle,
         }
 
         response_data["etat"] = True
@@ -2667,7 +2687,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
     try:
         # Vérifier si l'entreprise existe
         utilisateur = Utilisateur.objects.get(uuid=uuid)
-        if utilisateur.groups.filter(name__in=["Admin", "Editor"]).exists():
+        if utilisateur.groups.filter(name__in=["Admin", "Editor", "Author"]).exists():
             entreprise = Entreprise.objects.get(uuid=entreprise_id)
 
             # Récupérer toutes les sous-catégories associées à cette entreprise
@@ -2686,6 +2706,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
                     "pu": entrer.pu,
                     "client": entrer.client.nom if entrer.client else None,
                     "qte": entrer.qte,
+                    "is_sortie": entrer.is_sortie,
                     "price": entrer.prix_total,
                     "image": entrer.souscategorie.image.url if entrer.souscategorie.image else None,
                     "date": entrer.date.strftime("%Y-%m-%d"),
@@ -3401,7 +3422,7 @@ def get_facEntres_utilisateur(request, uuid, entreprise_id):
                 "libelle": fac.libelle,
                 "ref": fac.ref,
                 "facture": fac.facture.url if fac.facture else None,
-                "date": fac.date.strftime("%d-%m-%Y"),
+                "date": fac.date.strftime("%Y-%m-%d"),
             }
             for fac in factEntres
         ]
@@ -3634,8 +3655,7 @@ def get_facSorties_utilisateur(request, uuid, entreprise_id):
                 "libelle": liv.libelle,
                 "ref": liv.ref,
                 "facture": liv.facture.url if liv.facture else None,
-                "date": liv.date.strftime("%d-%m-%Y"),
-
+                "date": liv.date.strftime("%Y-%m-%d"),
             }
             for liv in entrers
         ]
@@ -3680,6 +3700,7 @@ def info_sous_cat(request):
                         "client": entrer.client.nom if entrer.client else None,
                         "pu": entrer.pu,
                         "qte": entrer.qte,
+                        "date": entrer.created_at,
                         "prix_total": entrer.prix_total,
 
                     })
@@ -3690,6 +3711,7 @@ def info_sous_cat(request):
                         "prix_total": entrer.prix_total,
                         "libelle": entrer.libelle,
                         "pu": entrer.pu,
+                        "date": entrer.created_at,
                         "client": entrer.client.nom if entrer.client else None,
                         "qte": entrer.qte,
 
