@@ -14,7 +14,7 @@ from django.views.decorators.csrf import csrf_exempt
 from fonction import token_required
 
 from .models import Entreprise, Categorie, SousCategorie, Entrer, Sortie, FactSortie, Depense, FactEntre, \
-    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise
+    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise, Avis
 from utilisateur.models import Utilisateur, Licence
 
 # from root.outil import get_order_id
@@ -27,7 +27,144 @@ from root.outil import get_order_id, verifier_numero, paiement_orange, paiement_
 
 # Create your views here.
 
+# Pour les avis
+
+@csrf_exempt
+@token_required
+def add_avis(request):
+    response_data = {'message': "Requete invalide", 'etat': False}
+
+    if request.method == "POST":
+        form = request.POST
+
+        libelle = form.get("libelle")
+        description = form.get("description")
+        admin_id = form.get("user_id")
+
+        if admin_id:
+
+            admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+
+            if admin:
+                # if admin.has_perm('entreprise.add_depense'):
+                if admin.groups.filter(name="Admin").exists():
+
+                    new_livre = Avis(description=description, libelle=libelle, utilisateur=admin)
+                    new_livre.save()
+
+                    response_data["etat"] = True
+                    response_data["id"] = new_livre.id
+                    response_data["slug"] = new_livre.slug
+                    response_data["message"] = "success"
+
+                else:
+                    # L'utilisateur n'a pas la permission d'ajouter une catégorie
+                    response_data["message"] = "Vous n'avez pas la permission d'envoyer un avis."
+            else:
+                return JsonResponse({'message': "Admin non trouvee", 'etat': False})
+
+        else:
+            response_data["message"] = "ID de l'utilisateur manquant !"
+
+    return JsonResponse(response_data)
+
+
+@csrf_exempt
+@token_required
+def get_avis(request):
+    response_data = {'message': "Requete invalide", 'etat': False, 'donnee': []}
+
+    if request.method == "POST":
+        try:
+            form = json.loads(request.body.decode("utf-8"))
+        except:
+            return JsonResponse({'message': "Erreur lors de le lecture des donnees JSON", 'etat': False})
+
+        all_livre = Sortie.objects.all()
+        filtrer = False
+
+        user_id = form.get("user_id")
+        if user_id:
+
+            user = Utilisateur.objects.filter(uuid=user_id).first()
+
+            if user:
+                if user.groups.filter(name="Admin").exists():
+
+                    livre_all = form.get("all")
+                    if livre_all:
+                        all_livre = Avis.objects.all()
+                        filtrer = True
+
+                    if filtrer:
+                        # print(filtrer)
+                        data = []
+                        for liv in all_livre:
+                            data.append({
+                                "id": liv.id,
+                                "uuid": liv.uuid,
+                                "libelle": liv.libelle,
+                                "description": liv.description,
+                                "date": str(liv.created_at),
+                            })
+
+                        if data:
+                            response_data["etat"] = True
+                            response_data["message"] = "success"
+                            response_data["donnee"] = data
+                        else:
+                            response_data["message"] = "Aucun avis effectuer."
+                else:
+                    # L'utilisateur n'a pas la permission d'ajouter une catégorie
+                    response_data["message"] = "Vous n'avez pas la permission de voir les avis."
+            else:
+                response_data["message"] = "Utilisateur non trouvé."
+    return JsonResponse(response_data)
+
+
+@csrf_exempt
+@token_required
+def del_avis(request):
+    response_data = {'message': "Requete invalide", 'etat': False}
+
+    if request.method == "POST":
+        try:
+            form = json.loads(request.body.decode("utf-8"))
+            id = form.get("uuid")
+            slug = form.get("slug")
+            user_id = form.get("user_id")
+        except json.JSONDecodeError:
+            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
+
+        user = Utilisateur.objects.filter(uuid=user_id).first()
+
+        if user:
+            # if user.has_perm('entreprise.delete_depense'):
+            if user.groups.filter(name="Admin").exists():
+                if id or slug:
+                    if id:
+                        livre_from_database = Avis.objects.filter(uuid=id).first()
+                    else:
+                        livre_from_database = Avis.objects.filter(slug=slug).first()
+
+                    if not livre_from_database:
+                        response_data["message"] = "Depense non trouvée"
+                    else:
+                        livre_from_database.delete()
+                        response_data["etat"] = True
+                        response_data["message"] = "Success"
+                else:
+                    response_data["message"] = "ID ou slug de l'avis manquant"
+            else:
+                # L'utilisateur n'a pas la permission d'ajouter une catégorie
+                response_data["message"] = "Vous n'avez pas la permission de supprimer un Avis."
+        else:
+            response_data["message"] = "Utilisateur non trouvé."
+    return JsonResponse(response_data)
+
+
 # Pour les Entreprise
+
 @csrf_exempt
 @token_required
 def add_entreprise(request):

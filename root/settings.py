@@ -38,9 +38,19 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'ckeditor',
     'utilisateur',
     'entreprise',
 ]
+
+CKEDITOR_CONFIGS = {
+    'default': {
+        'toolbar': 'full',
+        'height': 400,
+        'width': 'auto',
+        'allowedContent': True,  # Permet de conserver tous les styles HTML
+    },
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
