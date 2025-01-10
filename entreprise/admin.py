@@ -1,11 +1,15 @@
 from django.contrib import admin
 
 from .models import Entrer, HistoriqueEntrer, Categorie, SousCategorie, Depense, Entreprise, Sortie, HistoriqueSortie, \
-    Client, FactEntre, FactSortie
+    Client, FactEntre, FactSortie, Avis
 
 
 # Register your models here.
 class CategorieAdmin(admin.ModelAdmin):
+    pass
+
+
+class AvisAdmin(admin.ModelAdmin):
     pass
 
 
@@ -51,6 +55,7 @@ class FactSortieAdmin(admin.ModelAdmin):
 
 admin.site.register(Entreprise, EntrepriseAdmin)
 admin.site.register(Client, ClientAdmin)
+admin.site.register(Avis, AvisAdmin)
 admin.site.register(Categorie, CategorieAdmin)
 admin.site.register(SousCategorie, SousCategorieAdmin)
 admin.site.register(Depense, DepenseAdmin)

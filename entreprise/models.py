@@ -66,6 +66,9 @@ class Avis(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
+    def __str__(self):
+        return self.libelle
+
 
 class PaiementEntreprise(models.Model):
     order_id = models.CharField(max_length=512, unique=True)
@@ -209,7 +212,7 @@ class Depense(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
-        return self.ref
+        return self.libelle
 
     def _get_unique_slug(self):
         slug = slugify(self.libelle)
@@ -288,6 +291,7 @@ class Entrer(models.Model):
             dernier_produit.qte += int(self.qte)  # Cumule la quantité
             dernier_produit.pu = int(self.pu)
             dernier_produit.date = self.date
+            dernier_produit.ref = self.ref
             # Sauvegarde la mise à jour du produit existant
             dernier_produit.save()
 
@@ -390,7 +394,7 @@ class Entrer(models.Model):
     #         )
 
     def generate_unique_code(self):
-        date_str = datetime.datetime.now().strftime("%Y%m%d")
+        date_str = datetime.datetime.now().strftime("%m%d")
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
         return f"{date_str}{random_str}"
 
@@ -507,7 +511,7 @@ class Sortie(models.Model):
         )
 
     def generate_unique_code(self):
-        date_str = datetime.datetime.now().strftime("%d%m%Y")
+        date_str = datetime.datetime.now().strftime("%m%d")
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
         return f"{date_str}{random_str}"
 

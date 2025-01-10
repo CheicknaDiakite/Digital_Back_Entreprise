@@ -35,7 +35,11 @@ def add_avis(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
     if request.method == "POST":
-        form = request.POST
+
+        try:
+            form = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
 
         libelle = form.get("libelle")
         description = form.get("description")
@@ -54,7 +58,6 @@ def add_avis(request):
 
                     response_data["etat"] = True
                     response_data["id"] = new_livre.id
-                    response_data["slug"] = new_livre.slug
                     response_data["message"] = "success"
 
                 else:
@@ -685,8 +688,6 @@ def get_entreprise_utilisateurs(request, uuid):
             {
                 "id": utilisateur.id,
                 "uuid": utilisateur.uuid,
-                "ref": utilisateur.ref,
-                "libelle": utilisateur.relibellef,
                 "username": utilisateur.username,
                 "email": utilisateur.email,
                 "first_name": utilisateur.first_name,
@@ -2841,6 +2842,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
                     "uuid": entrer.uuid,
                     "libelle": entrer.libelle,
                     "pu": entrer.pu,
+                    "ref": entrer.ref,
                     "client": entrer.client.nom if entrer.client else None,
                     "qte": entrer.qte,
                     "is_sortie": entrer.is_sortie,
