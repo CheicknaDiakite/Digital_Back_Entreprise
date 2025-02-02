@@ -1,14 +1,16 @@
 import json
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from itertools import chain
 
 from django.core.exceptions import ValidationError
-from django.db.models import Sum, Q, Count
+from django.db.models import Sum, Q, Count, F, Func, IntegerField
 from django.db.models.functions import TruncWeek, TruncMonth
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 
 from fonction import token_required
@@ -710,78 +712,6 @@ def get_entreprise_utilisateurs(request, uuid):
 
     return JsonResponse(response_data)
 
-# @csrf_exempt
-# @token_required
-# def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
-#     try:
-#         # Récupérer l'utilisateur et l'entreprise
-#         utilisateur = Utilisateur.objects.get(uuid=user_id)
-#         entreprise = Entreprise.objects.get(uuid=entreprise_id, utilisateurs=utilisateur)
-#
-#         # Récupérer les catégories, sous-catégories, entrées et sorties
-#         categories = Categorie.objects.filter(entreprise=entreprise)
-#         souscategories = SousCategorie.objects.filter(categorie__in=categories)
-#         entrers = Entrer.objects.filter(souscategorie__in=souscategories)
-#         sorties = Sortie.objects.filter(entrer__in=entrers)
-#
-#         # Calculs des totaux
-#         total_sortie_qte = sorties.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         total_entrer_qte = entrers.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         total_sortie_pu = sum(sortie.prix_total for sortie in sorties)
-#         total_entrer_pu = sum(entrer.prix_total for entrer in entrers)
-#
-#         # Comptage des enregistrements
-#         count_entrer = entrers.count()
-#         count_sortie = sorties.count()
-#
-#         # Récupérer les détails par mois pour les Entrées
-#         details_entrer_par_mois = defaultdict(list)
-#         for entrer in entrers.annotate(month=TruncMonth('created_at')):
-#             month_name = datetime.strftime(entrer.month, "%B %Y")  # Ex: "December 2024"
-#             details_entrer_par_mois[month_name].append({
-#                 "id": entrer.id,
-#                 "qte": entrer.qte,
-#                 "pu": entrer.pu,
-#                 "prix_total": entrer.prix_total,
-#                 "created_at": entrer.created_at,
-#             })
-#
-#         # Récupérer les détails par mois pour les Sorties
-#         details_sortie_par_mois = defaultdict(list)
-#         for sortie in sorties.annotate(month=TruncMonth('created_at')):
-#             month_name = datetime.strftime(sortie.month, "%B %Y")  # Ex: "December 2024"
-#             details_sortie_par_mois[month_name].append({
-#                 "id": sortie.id,
-#                 "qte": sortie.qte,
-#                 "pu": sortie.pu,
-#                 "prix_total": sortie.prix_total,
-#                 "created_at": sortie.created_at,
-#             })
-#
-#         # Construire la réponse avec les résultats
-#         data = {
-#             "somme_sortie_qte": total_sortie_qte,
-#             "somme_sortie_pu": total_sortie_pu,
-#             "somme_entrer_qte": total_entrer_qte,
-#             "somme_entrer_pu": total_entrer_pu,
-#             "nombre_entrer": count_entrer,
-#             "nombre_sortie": count_sortie,
-#             "details_entrer_par_mois": details_entrer_par_mois,
-#             "details_sortie_par_mois": details_sortie_par_mois,
-#         }
-#
-#         response_data = {
-#             "etat": True,
-#             "message": "Quantité, prix et détails récupérés avec succès",
-#             "donnee": data
-#         }
-#
-#     except Utilisateur.DoesNotExist:
-#         response_data = {"etat": False, "message": "Utilisateur non trouvé"}
-#     except Entreprise.DoesNotExist:
-#         response_data = {"etat": False, "message": "Entreprise non trouvée pour cet utilisateur"}
-#
-#     return JsonResponse(response_data)
 
 @csrf_exempt
 @token_required
@@ -873,228 +803,163 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
     return JsonResponse(response_data)
 
 
-# les donnees par semaine
-# @csrf_exempt
-# @token_required
-# def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
-#     try:
-#         # Récupérer l'utilisateur et l'entreprise
-#         utilisateur = Utilisateur.objects.get(uuid=user_id)
-#         entreprise = Entreprise.objects.get(uuid=entreprise_id, utilisateurs=utilisateur)
-#
-#         # Récupérer les catégories, sous-catégories, entrées et sorties
-#         categories = Categorie.objects.filter(entreprise=entreprise)
-#         souscategories = SousCategorie.objects.filter(categorie__in=categories)
-#         entrers = Entrer.objects.filter(souscategorie__in=souscategories)
-#         sorties = Sortie.objects.filter(entrer__in=entrers)
-#
-#         # Calculs des totaux
-#         total_sortie_qte = sorties.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         total_entrer_qte = entrers.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         total_sortie_pu = sum(sortie.prix_total for sortie in sorties)
-#         total_entrer_pu = sum(entrer.prix_total for entrer in entrers)
-#
-#         # Comptage des enregistrements
-#         count_entrer = entrers.count()
-#         count_sortie = sorties.count()
-#
-#         # Récupérer les entrées comptées par semaine (enregistrements)
-#         count_entrer_par_semaine = entrers.annotate(week=TruncWeek('created_at')).values('week').annotate(
-#             count=Count('id')).order_by('week')
-#
-#         # Récupérer les sorties comptées par semaine (enregistrements)
-#         count_sortie_par_semaine = sorties.annotate(week=TruncWeek('created_at')).values('week').annotate(
-#             count=Count('id')).order_by('week')
-#
-#         # Récupérer les détails par semaine pour les Entrées
-#         details_entrer_par_semaine = defaultdict(list)
-#         for entrer in entrers.annotate(week=TruncWeek('created_at')):
-#             details_entrer_par_semaine[entrer.week].append({
-#                 "id": entrer.id,
-#                 "qte": entrer.qte,
-#                 "pu": entrer.pu,
-#                 "prix_total": entrer.prix_total,
-#                 "created_at": entrer.created_at,
-#                 # "souscategorie_nom": entrer.souscategorie.libelle
-#             })
-#
-#         # Récupérer les détails par semaine pour les Sorties
-#         details_sortie_par_semaine = defaultdict(list)
-#         for sortie in sorties.annotate(week=TruncWeek('created_at')):
-#             details_sortie_par_semaine[sortie.week].append({
-#                 "id": sortie.id,
-#                 "qte": sortie.qte,
-#                 "pu": sortie.pu,
-#                 "prix_total": sortie.prix_total,
-#                 "created_at": sortie.created_at,
-#                 # "souscategorie_nom": sortie.entrer.souscategorie.libelle
-#             })
-#
-#         # Construire la réponse avec les résultats
-#         data = {
-#             "somme_sortie_qte": total_sortie_qte,
-#             "somme_sortie_pu": total_sortie_pu,
-#             "somme_entrer_qte": total_entrer_qte,
-#             "somme_entrer_pu": total_entrer_pu,
-#             "nombre_entrer": count_entrer,
-#             "nombre_sortie": count_sortie,
-#             "details_entrer_par_semaine": {
-#                 str(week): details for week, details in details_entrer_par_semaine.items()
-#             },
-#             "details_sortie_par_semaine": {
-#                 str(week): details for week, details in details_sortie_par_semaine.items()
-#             },
-#             "count_entrer_par_semaine": list(count_entrer_par_semaine),
-#             "count_sortie_par_semaine": list(count_sortie_par_semaine),
-#         }
-#
-#         response_data = {
-#             "etat": True,
-#             "message": "Quantité, prix et détails récupérés avec succès",
-#             "donnee": data
-#         }
-#
-#     except Utilisateur.DoesNotExist:
-#         response_data = {"etat": False, "message": "Utilisateur non trouvé"}
-#     except Entreprise.DoesNotExist:
-#         response_data = {"etat": False, "message": "Entreprise non trouvée pour cet utilisateur"}
-#
-#     return JsonResponse(response_data)
+class ExtractWeek(Func):
+    function = "EXTRACT"
+    template = "%(function)s(WEEK FROM %(expressions)s)"
+    output_field = IntegerField()  # Utilisez IntegerField pour la sortie
+
+
+@csrf_exempt
+@token_required
+def sous_categories_sorties_par_mois(request, entreprise_uuid):
+    try:
+        # Récupérer la date actuelle et le début de l'année
+        date_actuelle = now()
+        debut_annee = date_actuelle.replace(month=1, day=1)
+
+        # Récupérer l'entreprise
+        entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
+
+        # Filtrer les sorties
+        sorties = Sortie.objects.filter(
+            entrer__souscategorie__categorie__entreprise=entreprise,
+            created_at__gte=debut_annee
+        ).select_related('entrer__souscategorie')
+
+        # Annoter et regrouper par mois et sous-catégorie
+        sorties_par_mois = sorties.annotate(
+            mois=TruncMonth('created_at')  # Annoter avec le mois
+        ).values(
+            'mois',  # Inclure le mois dans le regroupement
+            'entrer__souscategorie__libelle'
+        ).annotate(nombre_sorties=Count('id')).order_by('mois')
+
+        # Organiser les données par mois en une liste
+        resultats_par_mois = []
+        mois_actuel = None
+        details = []
+
+        for sortie in sorties_par_mois:
+            mois = sortie['mois'].strftime("%B %Y")  # Ex : "January 2024"
+
+            # Si c'est un nouveau mois, ajouter les détails du mois précédent
+            if mois_actuel and mois_actuel != mois:
+                resultats_par_mois.append({
+                    "month": mois_actuel,
+                    "details": details
+                })
+                details = []  # Réinitialiser les détails
+
+            # Ajouter les détails de la sortie courante
+            details.append({
+                "libelle": sortie['entrer__souscategorie__libelle'],
+                "count": sortie['nombre_sorties']
+            })
+            mois_actuel = mois
+
+        # Ajouter le dernier mois traité
+        if mois_actuel:
+            resultats_par_mois.append({
+                "month": mois_actuel,
+                "details": details
+            })
+
+        # Construire la réponse
+        data = {
+            "annee": debut_annee.year,
+            "sorties_par_mois": resultats_par_mois
+        }
+        response_data = {
+            "etat": True,
+            "message": "Données des sorties par mois récupérées avec succès",
+            "donnee": data
+        }
+
+    except Entreprise.DoesNotExist:
+        response_data = {"etat": False, "message": "Entreprise non trouvée"}
+    except Exception as e:
+        response_data = {"etat": False, "message": str(e)}
+
+    return JsonResponse(response_data, safe=False)
+
 
 # @csrf_exempt
 # @token_required
-# def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
-#     try:
-#         # Récupérer l'utilisateur par son ID
-#         utilisateur = Utilisateur.objects.get(uuid=user_id)
+# def sous_categories_sorties_par_semaine(request, entreprise_uuid):
+#     # Récupérer la date actuelle et calculer le début de la semaine
+#     date_actuelle = now()
+#     debut_semaine = date_actuelle - timedelta(days=date_actuelle.weekday())
 #
-#         # Récupérer la entreprise associée à cet utilisateur
-#         entreprise = Entreprise.objects.get(uuid=entreprise_id, utilisateurs=utilisateur)
+#     # Filtrer les sorties en fonction de l'utilisateur, de l'entreprise et de la période (cette semaine)
+#     sorties = Sortie.objects.filter(
+#         entrer__souscategorie__categorie__entreprise__uuid=entreprise_uuid,
+#         created_at__gte=debut_semaine
+#     ).select_related('entrer__souscategorie')
 #
-#         # Récupérer les catégories de la entreprise
-#         categories = Categorie.objects.filter(entreprise=entreprise)
-#         souscategories = SousCategorie.objects.filter(categorie__in=categories)
+#     # Annoter et compter les sorties par sous-catégorie
+#     sorties_par_sous_categorie = sorties.values(
+#         'entrer__souscategorie__libelle'
+#     ).annotate(nombre_sorties=Count('id'))
 #
-#         # Récupérer tous les entrers pour les sous-catégories de cette entreprise
-#         entrers = Entrer.objects.filter(souscategorie__in=souscategories)
-#
-#         # Récupérer les sorties associés à ces entrers
-#         sorties = Sortie.objects.filter(entrer__in=entrers)
-#
-#         # Calculer la somme des quantités et des prix unitaires pour les Sorties
-#         total_sortie_qte = sorties.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         # total_sortie_pu = sorties.aggregate(total_pu=Sum('pu'))['total_pu'] or 0
-#
-#         # Calculer la somme des quantités et des prix unitaires pour les entrers
-#         total_entrer_qte = entrers.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
-#         # total_entrer_pu = entrers.aggregate(total_pu=Sum('pu'))['total_pu'] or 0
-#
-#         # Calculer la somme des prix totaux pour les sorties (prix_total = pu * qte)
-#         total_sortie_pu = sum(sortie.prix_total for sortie in sorties)
-#         # Calculer la somme des prix totaux pour les entrers (prix_total = pu * qte)
-#         total_entrer_pu = sum(entrer.prix_total for entrer in entrers)
-#
-#         # Récupérer le nombre d'enregistrements pour les entrées et les sorties
-#         count_entrer = entrers.count()
-#         count_sortie = sorties.count()
-#
-#         # Récupérer les entrées comptées par semaine (enregistrements)
-#         count_entrer_par_semaine = entrers.annotate(week=TruncWeek('created_at')).values('week').annotate(
-#             count=Count('id')).order_by('week')
-#
-#         # Récupérer les sorties comptées par semaine (enregistrements)
-#         count_sortie_par_semaine = sorties.annotate(week=TruncWeek('created_at')).values('week').annotate(
-#             count=Count('id')).order_by('week')
-#
-#         # Construire la réponse avec les résultats
-#         data = {
-#             "somme_sortie_qte": total_sortie_qte,
-#             "somme_sortie_pu": total_sortie_pu,
-#             "somme_entrer_qte": total_entrer_qte,
-#             "somme_entrer_pu": total_entrer_pu,
-#             "nombre_entrer": count_entrer,
-#             "nombre_sortie": count_sortie,
-#             "count_entrer_par_semaine": list(count_entrer_par_semaine),
-#             "count_sortie_par_semaine": list(count_sortie_par_semaine),
-#         }
-#
-#         response_data = {
-#             "etat": True,
-#             "message": "Quantité et prix récupérés avec succès",
-#             "donnee": data
-#         }
-#
-#     except Utilisateur.DoesNotExist:
-#         response_data = {
-#             "etat": False,
-#             "message": "Utilisateur non trouvé"
-#         }
-#     except Entreprise.DoesNotExist:
-#         response_data = {
-#             "etat": False,
-#             "message": "Entreprise non trouvée pour cet utilisateur"
-#         }
-#
-#     return JsonResponse(response_data)
-
-
-# Client
+#     # Construire une réponse JSON
+#     data = {
+#         "date_debut_semaine": debut_semaine.strftime('%Y-%m-%d'),
+#         "date_fin_semaine": date_actuelle.strftime('%Y-%m-%d'),
+#         "sous_categories_sorties": list(sorties_par_sous_categorie)
+#     }
+#     print("tes ", data)
+#     return JsonResponse(data, safe=False)
 
 # @csrf_exempt
 # @token_required
-# def add_client(request):
-#     response_data = {'message': "requête invalide", 'etat': False}
+# def sous_categories_sorties_par_semaine(request, entreprise_uuid):
+#     # Récupérer la date actuelle et calculer le début de l'année
+#     date_actuelle = now()
+#     debut_annee = date_actuelle.replace(month=1, day=1)
 #
-#     if request.method == "POST":
-#         try:
-#             form = json.loads(request.body.decode("utf-8"))
-#         except json.JSONDecodeError:
-#             return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+#     # Vérification de l'existence de l'entreprise
+#     entreprise = Entreprise.objects.filter(uuid=entreprise_uuid).first()
+#     if not entreprise:
+#         return JsonResponse({"error": "Entreprise non trouvée"}, status=404)
 #
-#         nom = form.get("nom")
-#         adresse = form.get("adresse")
-#         numero = form.get("numero")
-#         email = form.get("email")
-#         user_id = form.get("user_id")
-#         entreprise_id = form.get("entreprise_id")
-#         role = form.get("role")
-#         coordonne = form.get("coordonne")
-#         user = Utilisateur.objects.filter(uuid=user_id).first()
+#     # Filtrer les sorties
+#     sorties = Sortie.objects.filter(
+#         entrer__souscategorie__categorie__entreprise=entreprise,
+#         created_at__gte=debut_annee
+#     ).select_related('entrer__souscategorie')
 #
-#         if user:
+#     # Annoter et regrouper par semaine et sous-catégorie
+#     sorties_par_semaine = sorties.annotate(
+#         semaine=ExtractWeek('created_at')
+#     ).values(
+#         'semaine',  # Inclure la semaine dans le regroupement
+#         'entrer__souscategorie__libelle'
+#     ).annotate(nombre_sorties=Count('id')).order_by('semaine')
 #
-#             # Vérification des permissions de l'utilisateur
-#             # if user.has_perm('entreprise.add_client'):
-#             if (user.groups.filter(name="Admin").exists()
-#                     or user.groups.filter(name="Editor").exists()
-#                     or user.groups.filter(name="Editor").exists()
-#             ):
-#                 entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
-#                 if entreprise:
-#                     client = Client.objects.create(
-#                         nom=nom,
-#                         adresse=adresse,
-#                         numero=numero,
-#                         email=email,
-#                         coordonne=coordonne,
-#                         role=role,
-#                         entreprise=entreprise,
-#                     )
+#     # Organiser les données par semaine
+#     resultats_par_semaine = {}
+#     for sortie in sorties_par_semaine:
+#         semaine = f"Week {sortie['semaine']}"
+#         if semaine not in resultats_par_semaine:
+#             resultats_par_semaine[semaine] = []
+#         resultats_par_semaine[semaine].append({
+#             "month": sortie['entrer__souscategorie__libelle'],
+#             "count": sortie['nombre_sorties']
+#         })
 #
-#                     response_data["etat"] = True
-#                     response_data["id"] = client.uuid
-#                     response_data["message"] = "success"
-#                 else:
-#                     # L'utilisateur n'a pas la permission d'ajouter une catégorie
-#                     response_data["message"] = "Entreprise non trouver."
-#             else:
-#                 # L'utilisateur n'a pas la permission d'ajouter une catégorie
-#                 response_data["message"] = "Vous n'avez pas la permission d'ajouter une entreprise."
-#         else:
-#             response_data["message"] = "Utilisateur non trouvé."
-#
-#         # Autres cas d'erreurs...
-#     return JsonResponse(response_data)
+#     # Construire la réponse JSON
+#     data = {
+#         "annee": debut_annee.year,
+#         "sorties_par_semaine": list(resultats_par_semaine)
+#     }
+#     response_data = {
+#         "etat": True,
+#         "message": "Eta de vente des produits récupérés avec succès",
+#         "donnee": data
+#     }
+#     return JsonResponse(response_data, safe=False)
+
+
 @csrf_exempt
 # @token_required
 def add_client(request):
@@ -2403,6 +2268,7 @@ def add_entre(request):
 
         qte = form.get("qte")
         pu = form.get("pu")
+        pu_achat = form.get("pu_achat")
         libelle = form.get("libelle")
         date = form.get("date")
         admin_id = form.get("user_id")
@@ -2423,6 +2289,7 @@ def add_entre(request):
                         new_livre = Entrer(
                             qte=qte,
                             pu=pu,
+                            pu_achat=pu_achat,
                             libelle=libelle,
                             date=date,
                             cumuler_quantite=cumuler_quantite,
@@ -2431,8 +2298,19 @@ def add_entre(request):
                         )
 
                         # Ajout du client si client_id est fourni et valide
+                        # if client_id:
+                        #     client = Client.objects.filter(uuid=client_id).first()
+                        #     if client:
+                        #         new_livre.client = client
+                        #     else:
+                        #         return JsonResponse({'message': "Client non trouvé", 'etat': False})
                         if client_id:
-                            client = Client.objects.filter(uuid=client_id).first()
+                            try:
+                                client_uuid = uuid.UUID(client_id)  # Vérifier si client_id est un UUID valide
+                            except ValueError:
+                                return JsonResponse({'message': "Client non trouvé", 'etat': False})  # UUID invalide
+
+                            client = Client.objects.filter(uuid=client_uuid).first()
                             if client:
                                 new_livre.client = client
                             else:
@@ -2448,7 +2326,7 @@ def add_entre(request):
                             "message": "success"
                         })
                     else:
-                        return JsonResponse({'message': "Catégorie non trouvée", 'etat': False})
+                        return JsonResponse({'message': "Nom de produit non trouvée", 'etat': False})
                 else:
                     response_data[
                         "message"] = "Vous n'avez pas la permission d'ajouter une entrée."
@@ -2584,6 +2462,7 @@ def get_entre(request):
                                 "slug": liv.slug,
                                 "libelle": liv.libelle,
                                 "pu": liv.pu,
+                                "pu_achat": liv.pu_achat,
                                 "qte": liv.qte,
                                 "price": liv.prix_total,
                                 "image": liv.souscategorie.image.url if liv.souscategorie.image else None,
@@ -2642,6 +2521,10 @@ def set_entre(request):
 
                     if "pu" in form:
                         livre_from_database.pu = form["pu"]
+                        modifier = True
+
+                    if "pu_achat" in form:
+                        livre_from_database.pu_achat = form["pu_achat"]
                         modifier = True
 
                     if "is_sortie" in form:
@@ -2760,6 +2643,7 @@ def get_entre_un(request, uuid):
             "uuid": livre.uuid,
             "libelle": livre.libelle,
             "pu": livre.pu,
+            "pu_achat": livre.pu_achat,
             "qte": livre.qte,
             "image": livre.souscategorie.image.url if livre.souscategorie.image else None,
             "categorie_slug": livre.souscategorie.libelle,
@@ -2842,6 +2726,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
                     "uuid": entrer.uuid,
                     "libelle": entrer.libelle,
                     "pu": entrer.pu,
+                    "pu_achat": entrer.pu_achat,
                     "ref": entrer.ref,
                     "client": entrer.client.nom if entrer.client else None,
                     "qte": entrer.qte,
@@ -2971,13 +2856,23 @@ def add_sortie(request):
                         new_livre = Sortie(qte=qte, pu=pu, entrer=entrer)
 
                         # Ajout du client si client_id est fourni et valide
+                        # if client_id:
+                        #     client = Client.objects.filter(uuid=client_id).first()
+                        #     if client:
+                        #         new_livre.client = client
+                        #     else:
+                        #         return JsonResponse({'message': "Client non trouvé", 'etat': False})
                         if client_id:
-                            client = Client.objects.filter(uuid=client_id).first()
+                            try:
+                                client_uuid = uuid.UUID(client_id)  # Vérifier si client_id est un UUID valide
+                            except ValueError:
+                                return JsonResponse({'message': "Client non trouvé", 'etat': False})  # UUID invalide
+
+                            client = Client.objects.filter(uuid=client_uuid).first()
                             if client:
                                 new_livre.client = client
                             else:
                                 return JsonResponse({'message': "Client non trouvé", 'etat': False})
-
                         # Tentative de sauvegarde du livre
                         try:
                             new_livre.save(user=user)
@@ -3069,6 +2964,7 @@ def get_sortie(request):
                                 "uuid": liv.uuid,
                                 "slug": liv.slug,
                                 "pu": liv.pu,
+                                "ref": liv.ref,
                                 "qte": liv.qte,
                                 "categorie_libelle": liv.entrer.souscategorie.libelle,
                                 "libelle": liv.entrer.libelle,
@@ -3170,6 +3066,7 @@ def get_sortie_un(request, uuid):
             "uuid": livre.uuid,
             "qte": livre.qte,
             "pu": livre.pu,
+            "ref": livre.ref,
             "image": livre.entrer.souscategorie.image.url if livre.entrer.souscategorie.image else None,
             "categorie_libelle": livre.entrer.souscategorie.libelle,
             # "entre_id": livre.inventaire.slug,
@@ -3260,6 +3157,7 @@ def get_sorties_entreprise(request, uuid):
                 "uuid": sortie.uuid,
                 "slug": sortie.slug,
                 "pu": sortie.pu,
+                "ref": sortie.ref,
                 "qte": sortie.qte,
                 "categorie_libelle": sortie.entrer.souscategorie.libelle,
                 "client": sortie.client.nom if sortie.client else None,
@@ -3835,6 +3733,7 @@ def info_sous_cat(request):
                 sous_categorie = []
                 for entrer in entrers:
                     sous_categorie.append({
+                        "id": entrer.entrer.id,
                         "libelle": entrer.entrer.libelle,
                         "client": entrer.client.nom if entrer.client else None,
                         "pu": entrer.pu,
@@ -3850,6 +3749,7 @@ def info_sous_cat(request):
                         "prix_total": entrer.prix_total,
                         "libelle": entrer.libelle,
                         "pu": entrer.pu,
+                        "pu_achat": entrer.pu_achat,
                         "date": entrer.created_at,
                         "client": entrer.client.nom if entrer.client else None,
                         "qte": entrer.qte,

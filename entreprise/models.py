@@ -2,8 +2,12 @@ import datetime
 import random
 import string
 import uuid
+from io import BytesIO
 
+import barcode
+from barcode.writer import ImageWriter
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.db import models
 from django.db.models import Sum
 from django.utils.text import slugify
@@ -245,8 +249,7 @@ class Entrer(models.Model):
     libelle = models.CharField(max_length=200, null=False)
     qte = models.IntegerField(default=0)
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    # pu = models.IntegerField(default=0)
-
+    pu_achat = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=False, blank=False)
     # Champ booléen pour déterminer si on doit cumuler ou non la quantité
     cumuler_quantite = models.BooleanField(default=False)
     is_sortie = models.BooleanField(default=True, null=False, blank=False)
@@ -257,6 +260,11 @@ class Entrer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
+
+    barcode = models.ImageField(upload_to='imageCodes/', null=False, blank=True)
+    country_id = models.CharField(max_length=1, null=True)
+    manufacturer_id = models.CharField(max_length=6, null=True)
+    number_id = models.CharField(max_length=5, null=True)
 
     def __str__(self):
         return self.ref
@@ -276,6 +284,13 @@ class Entrer(models.Model):
 
     def save(self, *args, user=None, **kwargs):
         # Générer un slug unique s'il n'existe pas
+        # code_str = ''.join(random.choices(string.digits, k=12))
+        # EAN = barcode.get_barcode_class('ean13')
+        # ean = EAN(code_str, writer=ImageWriter())
+        # buffer = BytesIO()
+        # ean.write(buffer)
+        # self.barcode.save('barcode.png', File(buffer), save=False)
+
         if not self.slug:
             self.slug = self._get_unique_slug()
 
@@ -295,17 +310,6 @@ class Entrer(models.Model):
             # Sauvegarde la mise à jour du produit existant
             dernier_produit.save()
 
-            # Crée un historique pour la mise à jour du dernier produit
-            # HistoriqueEntrer.objects.create(
-            #     entrer=dernier_produit,
-            #     ref=self.ref,
-            #     libelle=f"Produit modifié par {user.first_name} {user.last_name}" if user else "Produit modifié",
-            #     categorie=self.souscategorie.libelle,
-            #     qte=self.qte,
-            #     pu=self.pu,
-            #     date=self.date,
-            #     action="updated"  # Indique que la quantité a été mise à jour
-            # )
             HistoriqueEntrer.objects.create(
                 entrer=dernier_produit,
                 ref=self.ref,
@@ -330,6 +334,14 @@ class Entrer(models.Model):
 
         # Ne crée un historique que si cumuler_quantite est false (ou si aucun produit n'a été trouvé)
         if not self.cumuler_quantite:
+            if user:
+                code_str = ''.join(random.choices(string.digits, k=12))
+                EAN = barcode.get_barcode_class('ean13')
+                ean = EAN(code_str, writer=ImageWriter())
+                buffer = BytesIO()
+                ean.write(buffer)
+                self.barcode.save('barcode.png', File(buffer), save=False)
+
             HistoriqueEntrer.objects.create(
                 entrer=self,
                 ref=self.ref,
@@ -340,58 +352,6 @@ class Entrer(models.Model):
                 date=self.date,
                 action="created"  # Ajuste l'action en fonction de l'état initial
             )
-
-    # def save(self, *args, user=None, **kwargs):
-    #     # Générer un slug unique s'il n'existe pas
-    #     if not self.slug:
-    #         self.slug = self._get_unique_slug()
-    #
-    #     # Vérifie si un produit avec la même sous-catégorie et référence existe déjà
-    #     dernier_produit = Entrer.objects.filter(souscategorie=self.souscategorie).order_by('-created_at').first()
-    #
-    #     # Si le booléen cumuler_quantite est vrai, on cumule les quantités
-    #     if self.cumuler_quantite and dernier_produit:
-    #
-    #         dernier_produit.qte = dernier_produit.qte + int(self.qte)  # Cumule la quantité
-    #         dernier_produit.pu = int(self.pu)
-    #         dernier_produit.date = self.date
-    #         # Sauvegarde la mise à jour du produit existant
-    #         dernier_produit.save()
-    #
-    #         # Crée un historique pour la mise à jour du dernier produit
-    #         HistoriqueEntrer.objects.create(
-    #             entrer=dernier_produit,
-    #             ref=self.ref,
-    #             libelle=f"Produit modifié par {user.first_name} {user.last_name}" if user else "Produit modifié",
-    #             categorie=self.souscategorie.libelle,
-    #             qte=self.qte,
-    #             pu=self.pu,
-    #             date=self.date,
-    #             action="updated"  # Indique que la quantité a été mise à jour
-    #         )
-    #
-    #         # On retourne ici pour éviter de créer un nouvel enregistrement d'inventaire
-    #         return
-    #
-    #     # Si cumuler_quantite est faux ou aucun produit existant, on sauvegarde normalement
-    #     if not self.ref:
-    #         self.ref = self.generate_unique_code()
-    #
-    #     # Sauvegarde d'abord l'inventaire (crée ou met à jour l'enregistrement)
-    #     super(Entrer, self).save(*args, **kwargs)
-    #
-    #     # Ne crée un historique que si cumuler_quantite est false (ou si aucun produit n'a été trouvé)
-    #     if not self.cumuler_quantite:
-    #         HistoriqueEntrer.objects.create(
-    #             entrer=self,
-    #             ref=self.ref,
-    #             libelle=f"Produit ajouté par {user.first_name} {user.last_name}" if user else "Produit ajouté",
-    #             categorie=f"{self.souscategorie.libelle} ({self.libelle})",
-    #             qte=self.qte,
-    #             pu=self.pu,
-    #             date=self.date,
-    #             action="created"  # Ajuste l'action en fonction de l'état initial
-    #         )
 
     def generate_unique_code(self):
         date_str = datetime.datetime.now().strftime("%m%d")
