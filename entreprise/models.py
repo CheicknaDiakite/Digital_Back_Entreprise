@@ -261,13 +261,17 @@ class Entrer(models.Model):
 
     client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
 
-    barcode = models.ImageField(upload_to='imageCodes/', null=False, blank=True)
+    barcode = models.ImageField(null=True, blank=True, upload_to=get_image_upload_to)
     country_id = models.CharField(max_length=1, null=True)
     manufacturer_id = models.CharField(max_length=6, null=True)
     number_id = models.CharField(max_length=5, null=True)
 
     def __str__(self):
         return self.ref
+
+    @property
+    def all_sortie(self):
+        return self.sortie_set.all()
 
     @property
     def prix_total(self):
@@ -335,12 +339,19 @@ class Entrer(models.Model):
         # Ne crée un historique que si cumuler_quantite est false (ou si aucun produit n'a été trouvé)
         if not self.cumuler_quantite:
             if user:
-                code_str = ''.join(random.choices(string.digits, k=12))
-                EAN = barcode.get_barcode_class('ean13')
-                ean = EAN(code_str, writer=ImageWriter())
+                # code_str = ''.join(random.choices(string.digits, k=12))
+                # EAN = barcode.get_barcode_class('ean13')
+                # ean = EAN(code_str, writer=ImageWriter())
+                # buffer = BytesIO()
+                # ean.write(buffer)
+                # self.barcode.save('barcode.png', File(buffer), save=True)
+                ref = str(self.ref)
+                BarcodeClass = barcode.get_barcode_class('code128')  # Code128 supporte les caractères alphanumériques
+                barcode_instance = BarcodeClass(ref, writer=ImageWriter())
                 buffer = BytesIO()
-                ean.write(buffer)
-                self.barcode.save('barcode.png', File(buffer), save=False)
+                barcode_instance.write(buffer)
+                # Utiliser l'UUID dans le nom du fichier pour éviter les conflits
+                self.barcode.save(f'{ref}.png', File(buffer), save=True)
 
             HistoriqueEntrer.objects.create(
                 entrer=self,

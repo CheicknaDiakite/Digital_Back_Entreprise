@@ -27,6 +27,10 @@ from root.outil import get_order_id, verifier_numero, paiement_orange, paiement_
     verifier_status
 
 
+def handel404(request, exception):
+    return render(request, 'pag_404.html', status=404)
+
+
 # Create your views here.
 
 # Pour les avis
@@ -2372,32 +2376,31 @@ def del_entre(request):
                     if not livre_from_database:
                         response_data["message"] = "Catégorie non trouvée"
                     else:
-                        ref_entrer = livre_from_database.ref  # Référence de l'entrer
-                        qte = livre_from_database.qte
-                        pu = livre_from_database.pu
-                        dateT = datetime.now()
-                        user = request.user
+                        if len(livre_from_database.all_sortie) > 0:
+                            response_data[
+                                "message"] = f"cet enregistrement possède des sorties ou ventes"
+                        else:
+                            ref_entrer = livre_from_database.ref  # Référence de l'entrer
+                            qte = livre_from_database.qte
+                            pu = livre_from_database.pu
+                            dateT = datetime.now()
+                            user = request.user
 
-                        # Ajouter une entrée dans l'historique avant la suppression
-                        HistoriqueEntrer.objects.create(
-                            entreprise=entreprise,
-                            ref=ref_entrer,
-                            libelle=f"Produit supprimer par {user.first_name} {user.last_name}" if user else "Produit supprimer",
-                            categorie=f"{livre_from_database.souscategorie.libelle} ({livre_from_database.libelle})",
-                            qte=qte,
-                            pu=pu,
-                            date=dateT,
-                            action='deleted',  # Indique que la quantité a été mise à jour
-                            # ref=ref_entrer,
-                            # action='deleted',
-                            # qte=qte,
-                            # pu=pu,
-                            # libelle=libelle,
-                            utilisateur=user  # Assumer que l'utilisateur est récupéré via token
-                        )
-                        livre_from_database.delete()
-                        response_data["etat"] = True
-                        response_data["message"] = "Success"
+                            # Ajouter une entrée dans l'historique avant la suppression
+                            HistoriqueEntrer.objects.create(
+                                entreprise=entreprise,
+                                ref=ref_entrer,
+                                libelle=f"Produit supprimer par {user.first_name} {user.last_name}" if user else "Produit supprimer",
+                                categorie=f"{livre_from_database.souscategorie.libelle} ({livre_from_database.libelle})",
+                                qte=qte,
+                                pu=pu,
+                                date=dateT,
+                                action='deleted',  # Indique que la quantité a été mise à jour
+                                utilisateur=user  # Assumer que l'utilisateur est récupéré via token
+                            )
+                            livre_from_database.delete()
+                            response_data["etat"] = True
+                            response_data["message"] = "Success"
                 else:
                     response_data["message"] = "ID ou slug de la catégorie manquant"
             else:
@@ -2733,6 +2736,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
                     "is_sortie": entrer.is_sortie,
                     "price": entrer.prix_total,
                     "image": entrer.souscategorie.image.url if entrer.souscategorie.image else None,
+                    "code_barre": entrer.barcode.url if entrer.barcode else None,
                     "date": entrer.date.strftime("%Y-%m-%d"),
                 }
                 for entrer in entrers
