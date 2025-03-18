@@ -87,6 +87,7 @@ WSGI_APPLICATION = 'root.wsgi.application'
 # settings.py
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:4173",
     "https://front.diakitedigital.com",
     "https://www.front.diakitedigital.com",
 ]

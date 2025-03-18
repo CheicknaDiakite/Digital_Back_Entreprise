@@ -16,7 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from fonction import token_required
 
 from .models import Entreprise, Categorie, SousCategorie, Entrer, Sortie, FactSortie, Depense, FactEntre, \
-    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise, Avis
+    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise, Avi
 from utilisateur.models import Utilisateur, Licence
 
 # from root.outil import get_order_id
@@ -59,7 +59,7 @@ def add_avis(request):
                 # if admin.has_perm('entreprise.add_depense'):
                 if admin.groups.filter(name="Admin").exists():
 
-                    new_livre = Avis(description=description, libelle=libelle, utilisateur=admin)
+                    new_livre = Avi(description=description, libelle=libelle, utilisateur=admin)
                     new_livre.save()
 
                     response_data["etat"] = True
@@ -102,7 +102,7 @@ def get_avis(request):
 
                     livre_all = form.get("all")
                     if livre_all:
-                        all_livre = Avis.objects.all()
+                        all_livre = Avi.objects.all()
                         filtrer = True
 
                     if filtrer:
@@ -152,9 +152,9 @@ def del_avis(request):
             if user.groups.filter(name="Admin").exists():
                 if id or slug:
                     if id:
-                        livre_from_database = Avis.objects.filter(uuid=id).first()
+                        livre_from_database = Avi.objects.filter(uuid=id).first()
                     else:
-                        livre_from_database = Avis.objects.filter(slug=slug).first()
+                        livre_from_database = Avi.objects.filter(slug=slug).first()
 
                     if not livre_from_database:
                         response_data["message"] = "Depense non trouvée"
@@ -2970,6 +2970,7 @@ def get_sortie(request):
                                 "pu": liv.pu,
                                 "ref": liv.ref,
                                 "qte": liv.qte,
+                                "is_remise": liv.is_remise,
                                 "categorie_libelle": liv.entrer.souscategorie.libelle,
                                 "libelle": liv.entrer.libelle,
                                 "prix_total": liv.prix_total,
@@ -2991,6 +2992,79 @@ def get_sortie(request):
             else:
                 response_data["message"] = "Utilisateur non trouvé."
     return JsonResponse(response_data)
+
+
+@csrf_exempt
+@token_required
+def update_sorties(request):
+    """
+    Met à jour le champ `is_remise` à True pour les sorties sélectionnées.
+    """
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Erreur lors de la lecture des données JSON", "etat": False}, status=400)
+
+        # Gestion des différents formats de données JSON
+        if isinstance(data, dict):
+            sortie_ids = data.get("ids", [])
+        elif isinstance(data, list):
+            # Si la liste contient un seul élément qui est lui-même une liste, on la déplie
+            if len(data) == 1 and isinstance(data[0], list):
+                sortie_ids = data[0]
+            else:
+                sortie_ids = data
+        else:
+            return JsonResponse({"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
+
+        # Vérification que sortie_ids est une liste non vide
+        if not sortie_ids or not isinstance(sortie_ids, list):
+            return JsonResponse({"message": "Aucun ID valide fourni", "etat": False}, status=400)
+
+        updated_count = Sortie.objects.filter(id__in=sortie_ids).update(is_remise=True)
+        return JsonResponse({
+            "message": f"{updated_count} enregistrements mis à jour.",
+            "etat": True
+        })
+
+    return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
+
+@csrf_exempt
+@token_required
+def update_fac_sorties(request):
+    """
+    Met à jour le champ `is_remise` à True pour les sorties sélectionnées.
+    """
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"message": "Erreur lors de la lecture des données JSON", "etat": False}, status=400)
+
+        # Gestion des différents formats de données JSON
+        if isinstance(data, dict):
+            sortie_ids = data.get("ids", [])
+        elif isinstance(data, list):
+            # Si la liste contient un seul élément qui est lui-même une liste, on la déplie
+            if len(data) == 1 and isinstance(data[0], list):
+                sortie_ids = data[0]
+            else:
+                sortie_ids = data
+        else:
+            return JsonResponse({"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
+
+        # Vérification que sortie_ids est une liste non vide
+        if not sortie_ids or not isinstance(sortie_ids, list):
+            return JsonResponse({"message": "Aucun ID valide fourni", "etat": False}, status=400)
+
+        updated_count = Sortie.objects.filter(id__in=sortie_ids).update(is_remise=False)
+        return JsonResponse({
+            "message": f"{updated_count} enregistrements mis à jour.",
+            "etat": True
+        })
+
+    return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
 
 
 @csrf_exempt
@@ -3163,6 +3237,7 @@ def get_sorties_entreprise(request, uuid):
                 "pu": sortie.pu,
                 "ref": sortie.ref,
                 "qte": sortie.qte,
+                "is_remise": sortie.is_remise,
                 "categorie_libelle": sortie.entrer.souscategorie.libelle,
                 "client": sortie.client.nom if sortie.client else None,
                 "libelle": sortie.entrer.libelle,

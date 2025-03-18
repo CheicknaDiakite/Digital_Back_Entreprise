@@ -10,6 +10,7 @@ from django.core.mail import EmailMessage
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.csrf import csrf_exempt
@@ -23,6 +24,65 @@ from root.mailer import send
 
 
 # Create your views here.
+# @csrf_exempt
+# def api_user_login(request):
+#     response_data = {'message': "requête invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         try:
+#             form = json.loads(request.body.decode("utf-8"))
+#         except json.JSONDecodeError:
+#             return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+#
+#         # if "username" in form and "password" in form:
+#         #     username = form.get("username")
+#         #     password = form.get("password")
+#         #
+#         #     user = authenticate(request, username=username, password=password)
+#         #     if user is not None:
+#         #         # Supprimer le token existant (si présent) et en créer un nouveau
+#         #         Token.objects.filter(user=user).delete()
+#         #         token = Token.objects.create(user=user)
+#         #
+#         #         response_data["etat"] = True
+#         #         response_data["id"] = user.uuid
+#         #         response_data["token"] = str(token.token)
+#         #         response_data["message"] = "Connexion réussie"
+#         #     else:
+#         #         user = Utilisateur.objects.filter(username=username).first()
+#         #         if user is not None:
+#         #             response_data["message"] = "Utilisateur ou mot de passe incorrect"
+#         #         else:
+#         #             response_data["message"] = "Utilisateur ou mot de passe incorrect."
+#         # else:
+#         #     response_data["message"] = "Nom d'utilisateur ou mot de passe manquant"
+#         if "username" in form and "password" in form:
+#             login_input = form.get("username").strip()  # Peut être un numéro de téléphone ou un username
+#             password = form.get("password").strip()
+#
+#             # Tentez de trouver l'utilisateur par le nom d'utilisateur ou le téléphone
+#             user = Utilisateur.objects.filter(username=login_input).first() or \
+#                    Utilisateur.objects.filter(numero=login_input).first()
+#
+#             if user:
+#                 # Validez le mot de passe
+#                 if check_password(password, user.password):
+#                     # Authentifiez et créez un nouveau token
+#                     Token.objects.filter(user=user).delete()
+#                     token = Token.objects.create(user=user)
+#
+#                     response_data["etat"] = True
+#                     response_data["id"] = user.uuid
+#                     response_data["token"] = str(token.token)
+#                     response_data["message"] = "Connexion réussie"
+#                 else:
+#                     response_data["message"] = "Utilisateur ou mot de passe incorrect"
+#             else:
+#                 response_data["message"] = "Utilisateur introuvable"
+#         else:
+#             response_data["message"] = "Nom d'utilisateur ou mot de passe manquant"
+#     return JsonResponse(response_data)
+
 @csrf_exempt
 def api_user_login(request):
     response_data = {'message': "requête invalide", 'etat': False}
@@ -33,42 +93,23 @@ def api_user_login(request):
         except json.JSONDecodeError:
             return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
 
-        # if "username" in form and "password" in form:
-        #     username = form.get("username")
-        #     password = form.get("password")
-        #
-        #     user = authenticate(request, username=username, password=password)
-        #     if user is not None:
-        #         # Supprimer le token existant (si présent) et en créer un nouveau
-        #         Token.objects.filter(user=user).delete()
-        #         token = Token.objects.create(user=user)
-        #
-        #         response_data["etat"] = True
-        #         response_data["id"] = user.uuid
-        #         response_data["token"] = str(token.token)
-        #         response_data["message"] = "Connexion réussie"
-        #     else:
-        #         user = Utilisateur.objects.filter(username=username).first()
-        #         if user is not None:
-        #             response_data["message"] = "Utilisateur ou mot de passe incorrect"
-        #         else:
-        #             response_data["message"] = "Utilisateur ou mot de passe incorrect."
-        # else:
-        #     response_data["message"] = "Nom d'utilisateur ou mot de passe manquant"
         if "username" in form and "password" in form:
             login_input = form.get("username").strip()  # Peut être un numéro de téléphone ou un username
             password = form.get("password").strip()
 
-            # Tentez de trouver l'utilisateur par le nom d'utilisateur ou le téléphone
+            # Tente de trouver l'utilisateur par username ou par numéro
             user = Utilisateur.objects.filter(username=login_input).first() or \
                    Utilisateur.objects.filter(numero=login_input).first()
 
             if user:
-                # Validez le mot de passe
                 if check_password(password, user.password):
-                    # Authentifiez et créez un nouveau token
+                    # Supprime l'ancien token et en crée un nouveau
                     Token.objects.filter(user=user).delete()
                     token = Token.objects.create(user=user)
+
+                    # Met à jour la date de la dernière connexion
+                    user.last_login = timezone.now()
+                    user.save()
 
                     response_data["etat"] = True
                     response_data["id"] = user.uuid
@@ -81,7 +122,6 @@ def api_user_login(request):
         else:
             response_data["message"] = "Nom d'utilisateur ou mot de passe manquant"
     return JsonResponse(response_data)
-
 
 @csrf_exempt
 def api_user_register(request):

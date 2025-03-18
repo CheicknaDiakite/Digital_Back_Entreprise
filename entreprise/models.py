@@ -5,6 +5,8 @@ import uuid
 from io import BytesIO
 
 import barcode
+import qrcode
+from PIL import ImageFont, ImageDraw, Image
 from barcode.writer import ImageWriter
 from django.core.exceptions import ValidationError
 from django.core.files import File
@@ -48,7 +50,6 @@ class Entreprise(models.Model):
         self.utilisateurs.add(utilisateur)
 
     def save(self, *args, **kwargs):
-
         if not self.ref:
             self.ref = self.generate_unique_code()
         super(Entreprise, self).save(*args, **kwargs)
@@ -60,6 +61,21 @@ class Entreprise(models.Model):
 
 
 class Avis(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+
+    utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
+
+    libelle = models.CharField(max_length=200, null=True, blank=True)
+
+    description = models.TextField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    def __str__(self):
+        return self.libelle
+
+
+class Avi(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
@@ -339,18 +355,62 @@ class Entrer(models.Model):
         # Ne crée un historique que si cumuler_quantite est false (ou si aucun produit n'a été trouvé)
         if not self.cumuler_quantite:
             if user:
-                # code_str = ''.join(random.choices(string.digits, k=12))
-                # EAN = barcode.get_barcode_class('ean13')
-                # ean = EAN(code_str, writer=ImageWriter())
+
+                # ref = str(self.ref)
+                # BarcodeClass = barcode.get_barcode_class('code128')  # Code128 supporte les caractères alphanumériques
+                # barcode_instance = BarcodeClass(ref, writer=ImageWriter())
                 # buffer = BytesIO()
-                # ean.write(buffer)
-                # self.barcode.save('barcode.png', File(buffer), save=True)
+                # barcode_instance.write(buffer)
+                # # Utiliser l'UUID dans le nom du fichier pour éviter les conflits
+                # self.barcode.save(f'{ref}.png', File(buffer), save=True)
+
+                # Génération du QR code
                 ref = str(self.ref)
-                BarcodeClass = barcode.get_barcode_class('code128')  # Code128 supporte les caractères alphanumériques
-                barcode_instance = BarcodeClass(ref, writer=ImageWriter())
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_L,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(ref)
+                qr.make(fit=True)
+                img_qr = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+                # Définition du texte et de la police
+                font_size = 20
+                try:
+                    # Utilise une police TrueType si disponible (adaptez le chemin si nécessaire)
+                    font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", font_size)
+                except IOError:
+                    font = ImageFont.load_default()
+
+                # Calcul des dimensions du texte avec textbbox
+                draw = ImageDraw.Draw(img_qr)
+                bbox = draw.textbbox((0, 0), ref, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+
+                # Création d'une nouvelle image avec un espace en bas pour le texte
+                new_width = max(img_qr.width, text_width)
+                new_height = img_qr.height + text_height + 10  # 10 pixels de marge
+                new_img = Image.new("RGB", (new_width, new_height), "white")
+
+                # Positionner le QR code dans la nouvelle image
+                x_offset = (new_width - img_qr.width) // 2
+                new_img.paste(img_qr, (x_offset, 0))
+
+                # Dessiner le texte en dessous du QR code, centré horizontalement
+                draw = ImageDraw.Draw(new_img)
+                text_x = (new_width - text_width) // 2
+                text_y = img_qr.height + 5  # 5 pixels de marge
+                draw.text((text_x, text_y), ref, fill="black", font=font)
+
+                # Sauvegarder l'image finale dans un buffer
                 buffer = BytesIO()
-                barcode_instance.write(buffer)
-                # Utiliser l'UUID dans le nom du fichier pour éviter les conflits
+                new_img.save(buffer, format="PNG")
+                buffer.seek(0)
+
+                # Enregistrer l'image dans le champ ImageField
                 self.barcode.save(f'{ref}.png', File(buffer), save=True)
 
             HistoriqueEntrer.objects.create(
@@ -415,6 +475,8 @@ class Sortie(models.Model):
 
     qte = models.IntegerField(default=0)
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    is_remise = models.BooleanField(default=False, null=False, blank=False)
 
     slug = models.SlugField(editable=False, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)

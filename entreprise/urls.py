@@ -11,7 +11,8 @@ from .views import add_entreprise, del_entreprise, get_entreprise, add_categorie
     get_utilisateur_entreprise_historique_supp, get_utilisateur_entreprise_historique, api_client_all, add_client, \
     get_client_un, set_client, set_categorie, del_client, get_entre, get_sortie_un, del_sortie, get_sous_categorie_un, \
     del_sous_categorie, set_sous_categorie, set_entre, ordre_paiement, pay_entreprise_get_historique, \
-    paiement_entreprise_callback, add_avis, get_avis, del_avis, sous_categories_sorties_par_mois
+    paiement_entreprise_callback, add_avis, get_avis, del_avis, sous_categories_sorties_par_mois, update_sorties, \
+    update_fac_sorties
 
 urlpatterns = [
     path("add", add_entreprise, name="add_bibliotheque"),
@@ -65,6 +66,8 @@ urlpatterns = [
 
     path("sortie/add", add_sortie, name="add_sous_categorie"),
     path("sortie/get", get_sortie, name="get_sous_categorie"),
+    path("sortie/set", update_sorties, name="update_sorties"),
+    path("sortie/setFac", update_fac_sorties, name="update_sorties"),
     path("sortie/del", del_sortie, name="del_sous_categorie"),
     path("sortie/get/<uuid:uuid>", get_sortie_un, name="get_sous_categorie_un"),
     path("sortie/get_sorties_entreprise/<uuid:uuid>", get_sorties_entreprise, name="get_sous_categorie_un"),
