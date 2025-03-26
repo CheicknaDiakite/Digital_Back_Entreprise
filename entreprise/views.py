@@ -2278,6 +2278,7 @@ def add_entre(request):
         admin_id = form.get("user_id")
         cumuler_quantite = form.get("cumuler_quantite")
         is_sortie = form.get("is_sortie")
+        is_prix = form.get("is_prix")
         categorie_slug = form.get("categorie_slug")
         client_id = form.get("client_id")
         user = request.user
@@ -2298,6 +2299,7 @@ def add_entre(request):
                             date=date,
                             cumuler_quantite=cumuler_quantite,
                             is_sortie=is_sortie,
+                            is_prix=is_prix,
                             souscategorie=categorie
                         )
 
@@ -2465,6 +2467,9 @@ def get_entre(request):
                                 "slug": liv.slug,
                                 "libelle": liv.libelle,
                                 "pu": liv.pu,
+                                "is_sortie": liv.is_sortie,
+                                "is_prix": liv.is_prix,
+
                                 "pu_achat": liv.pu_achat,
                                 "qte": liv.qte,
                                 "price": liv.prix_total,
@@ -2532,6 +2537,10 @@ def set_entre(request):
 
                     if "is_sortie" in form:
                         livre_from_database.is_sortie = form["is_sortie"]
+                        modifier = True
+
+                    if "is_prix" in form:
+                        livre_from_database.is_prix = form["is_prix"]
                         modifier = True
 
                     if "libelle" in form:
@@ -2647,6 +2656,8 @@ def get_entre_un(request, uuid):
             "libelle": livre.libelle,
             "pu": livre.pu,
             "pu_achat": livre.pu_achat,
+            "is_sortie": livre.is_sortie,
+            "is_prix": livre.is_prix,
             "qte": livre.qte,
             "image": livre.souscategorie.image.url if livre.souscategorie.image else None,
             "categorie_slug": livre.souscategorie.libelle,
@@ -2734,6 +2745,7 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
                     "client": entrer.client.nom if entrer.client else None,
                     "qte": entrer.qte,
                     "is_sortie": entrer.is_sortie,
+                    "is_prix": entrer.is_prix,
                     "price": entrer.prix_total,
                     "image": entrer.souscategorie.image.url if entrer.souscategorie.image else None,
                     "code_barre": entrer.barcode.url if entrer.barcode else None,

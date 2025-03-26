@@ -50,6 +50,14 @@ CKEDITOR_CONFIGS = {
         'width': 'auto',
         'allowedContent': True,  # Permet de conserver tous les styles HTML
     },
+    # 'default': {
+    #     'ENGINE': 'django.db.backends.mysql',
+    #     'NAME': "sc1dich5095_geststocks",
+    #     'USER': "sc1dich5095_geststocks_user",
+    #     'PASSWORD': "Bonjour@#0",
+    #     'HOST': 'localhost',
+    #     'PORT': '3306',
+    # }
 }
 
 MIDDLEWARE = [

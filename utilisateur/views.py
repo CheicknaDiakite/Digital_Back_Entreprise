@@ -159,12 +159,12 @@ def api_user_register(request):
                 try:
                     # Préparation de l'e-mail de confirmation
                     html_text = render_to_string('mail.html', context={
-                        "sujet": "Inscription reçu chez Diakite Digital",
+                        "sujet": "Inscription reçu sur Gest Stocks (Gestion de Stock)",
                         "message": (
                             f"Bonjour <b>{first_name} {last_name}</b>,<br><br>"
                             "Votre inscription est réussi.<br><br>"
-                            "Merci d'avoir choisi Diakite Digital ! <br><br> Vous pouvez maintenant utiliser tous nos services apres la verification par un de nos administrateur."
-                            "l'intérêt que vous portez à notre entreprise. Nous allons étudier votre incription<br><br>"
+                            "Merci d'avoir choisi Gest Stocks ! <br><br> Vous pouvez maintenant utiliser tous nos services apres la verification par un de nos administrateur."
+                            "l'intérêt que vous portez à notre entreprise (Diakite Digital). Nous allons étudier votre incription<br><br>"
                             # "et nous vous contacterons dans les meilleurs délais.<br><br>"
                             f"Votre Nom d'utilisateur est: <b>{username}</b>"
                         )
@@ -172,7 +172,7 @@ def api_user_register(request):
 
                     # Envoi de l'e-mail de confirmation
                     email_sent = send(
-                        sujet="Inscription reçu chez Diakite Digital",
+                        sujet="Inscription reçu sur Gest Stocks (Gestion de Stock)",
                         message="",
                         email_liste=[email],
                         html_message=html_text,
@@ -761,6 +761,7 @@ def api_user_get(request):
                                 "first_name": c.first_name,
                                 "last_name": c.last_name,
                                 "email": c.email,
+                                "email_user": c.email_user,
                                 "is_admin": c.is_admin,
                                 "is_superuser": c.is_superuser,
                                 "numero": c.numero,

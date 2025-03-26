@@ -59,22 +59,6 @@ class Entreprise(models.Model):
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
         return f"{date_str}{random_str}"
 
-
-class Avis(models.Model):
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-
-    utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
-
-    libelle = models.CharField(max_length=200, null=True, blank=True)
-
-    description = models.TextField(null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-
-    def __str__(self):
-        return self.libelle
-
-
 class Avi(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
@@ -269,6 +253,7 @@ class Entrer(models.Model):
     # Champ booléen pour déterminer si on doit cumuler ou non la quantité
     cumuler_quantite = models.BooleanField(default=False)
     is_sortie = models.BooleanField(default=True, null=False, blank=False)
+    is_prix = models.BooleanField(default=True, null=False, blank=False)
 
     slug = models.SlugField(editable=False, blank=True)
 
