@@ -159,14 +159,18 @@ def api_user_register(request):
                 try:
                     # Préparation de l'e-mail de confirmation
                     html_text = render_to_string('mail.html', context={
-                        "sujet": "Inscription reçu sur Gest Stocks (Gestion de Stock)",
+                        "sujet": "Inscription reçue sur Gest Stocks (Gestion de Stock)",
                         "message": (
                             f"Bonjour <b>{first_name} {last_name}</b>,<br><br>"
-                            "Votre inscription est réussi.<br><br>"
-                            "Merci d'avoir choisi Gest Stocks ! <br><br> Vous pouvez maintenant utiliser tous nos services apres la verification par un de nos administrateur."
-                            "l'intérêt que vous portez à notre entreprise (Diakite Digital). Nous allons étudier votre incription<br><br>"
-                            # "et nous vous contacterons dans les meilleurs délais.<br><br>"
-                            f"Votre Nom d'utilisateur est: <b>{username}</b>"
+                            "🎉 <b>Félicitations !</b> Votre inscription a bien été enregistrée.<br><br>"
+                            "Merci d'avoir choisi <b>Gest Stocks</b> pour la gestion de vos stocks.<br><br>"
+                            "Votre compte est actuellement en cours de vérification par notre équipe. "
+                            "Une fois validé, vous pourrez accéder à l’ensemble de nos services.<br><br>"
+                            "Nous vous remercions pour l’intérêt que vous portez à notre entreprise <b>(Diakite Digital)</b>. "
+                            "Votre inscription est en cours d’étude.<br><br>"
+                            f"🔐 <b>Votre nom d'utilisateur est :</b> <b>{username}</b><br><br>"
+                            "À très bientôt sur notre plateforme !<br><br>"
+                            "— L’équipe Diakite Digital"
                         )
                     })
 
@@ -220,7 +224,7 @@ def api_user_admin_register(request):
         except json.JSONDecodeError:
             return JsonResponse(response_data)
 
-        required_fields = ["username", "password", "first_name", "last_name", "email_user", "entreprise_id"]
+        required_fields = ["password", "first_name", "last_name", "email_user", "entreprise_id"]
         if all(field in form for field in required_fields):
             password = form.get("password")
             first_name = form.get("first_name")
@@ -259,13 +263,18 @@ def api_user_admin_register(request):
                 try:
                     # Préparation de l'e-mail de confirmation
                     html_text = render_to_string('mail.html', context={
-                        "sujet": "Inscription reçu chez Diakite Digital",
+                        "sujet": "Inscription reçue sur Gest Stocks (Gestion de Stock)",
                         "message": (
                             f"Bonjour <b>{first_name} {last_name}</b>,<br><br>"
-                            "Nous avons bien reçu votre inscription et nous vous remercions de "
-                            "l'intérêt que vous portez à notre entreprise. Nous allons étudier votre demande "
-                            "et nous vous contacterons dans les meilleurs délais.<br><br>"
-                            f"Votre Nom d'utilisateur est: <b>{username}</b>"
+                            "🎉 <b>Félicitations !</b> Votre inscription a bien été enregistrée.<br><br>"
+                            "Merci d'avoir choisi <b>Gest Stocks</b> pour la gestion de vos stocks.<br><br>"
+                            "Votre compte est actuellement en cours de vérification par notre équipe. "
+                            "Une fois validé, vous pourrez accéder à l’ensemble de nos services.<br><br>"
+                            "Nous vous remercions pour l’intérêt que vous portez à notre entreprise <b>(Diakite Digital)</b>. "
+                            "Votre inscription est en cours d’étude.<br><br>"
+                            f"🔐 <b>Votre nom d'utilisateur est :</b> <b>{username}</b><br><br>"
+                            "À très bientôt sur notre plateforme !<br><br>"
+                            "— L’équipe Diakite Digital"
                         )
                     })
 
@@ -291,6 +300,101 @@ def api_user_admin_register(request):
                             created_by=request.user  # L'administrateur qui a créé l'utilisateur
                         )
                         Utilisateur.objects.filter(username=username).first().entreprises.add(entreprise)
+                        # Authentification de l'utilisateur
+                        if new_user is not None:
+                            response_data["etat"] = True
+                            response_data["id"] = new_user.id
+                            response_data["message"] = "success"
+                        else:
+                            response_data["message"] = "Échec de la création"
+                    else:
+                        response_data[
+                            "message"] = "Échec de l'envoi de l'e-mail, verifier votre connexion. Inscription annulée."
+                except Exception as e:
+                    response_data["message"] = f"Erreur lors du traitement : {str(e)}"
+
+    return JsonResponse(response_data)
+
+
+@csrf_exempt
+@token_required
+def api_user_cabinet_register(request):
+    response_data = {'message': "requête invalide", 'etat': False, 'id': ""}
+
+    if request.method == "POST":
+        try:
+            form = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse(response_data)
+
+        required_fields = ["password", "first_name", "last_name", "email"]
+        if all(field in form for field in required_fields):
+            password = form.get("password")
+            first_name = form.get("first_name")
+            numero = form.get("numero")
+            role = form.get("role")
+            last_name = form.get("last_name")
+            email_user = form.get("email")
+
+            admin_user = request.user  # L'administrateur en cours
+            created_users_count = Utilisateur.objects.filter(created_by=admin_user).count()
+
+            if created_users_count >= 20:
+                response_data["message"] = "Vous avez atteint la limite de 20 utilisateurs créés."
+                return JsonResponse(response_data)
+
+            # Vérification de l'existence de l'utilisateur avec le même username ou email
+
+            if Utilisateur.objects.filter(email=email_user).exists():
+                response_data["message"] = "cet email est déjà utilisé"
+            else:
+                # Génération du nom d'utilisateur unique
+                base_username = f"{first_name[:2].lower()}0001{last_name[:2].lower()}"
+                username = base_username
+                counter = 1
+                while Utilisateur.objects.filter(username=username).exists():
+                    counter += 1
+                    username = f"{first_name[:2].lower()}{counter:04d}{last_name[:2].lower()}"
+
+                try:
+                    # Préparation de l'e-mail de confirmation
+                    html_text = render_to_string('mail.html', context={
+                        "sujet": "Inscription reçue sur Gest Stocks (Gestion de Stock)",
+                        "message": (
+                            f"Bonjour <b>{first_name} {last_name}</b>,<br><br>"
+                            "🎉 <b>Félicitations !</b> Votre inscription a bien été enregistrée.<br><br>"
+                            "Merci d'avoir choisi <b>Gest Stocks</b> pour la gestion de vos stocks.<br><br>"
+                            "Votre compte est actuellement en cours de vérification par notre équipe. "
+                            "Une fois validé, vous pourrez accéder à l’ensemble de nos services.<br><br>"
+                            "Nous vous remercions pour l’intérêt que vous portez à notre entreprise <b>(Diakite Digital)</b>. "
+                            "Votre inscription est en cours d’étude.<br><br>"
+                            f"🔐 <b>Votre nom d'utilisateur est :</b> <b>{username}</b><br><br>"
+                            "À très bientôt sur notre plateforme !<br><br>"
+                            "— L’équipe Diakite Digital"
+                        )
+                    })
+
+                    # Envoi de l'e-mail de confirmation
+                    email_sent = send(
+                        sujet="Inscription reçu chez Diakite Digital",
+                        message="",
+                        email_liste=[request.user.email],
+                        html_message=html_text,
+                    )
+
+                    if email_sent:
+
+                        # Création de l'utilisateur avec le champ created_by
+                        new_user = Utilisateur.objects.create_user(
+                            first_name=first_name,
+                            last_name=last_name,
+                            username=username,
+                            numero=numero,
+                            role=role,
+                            email=email_user,
+                            password=password,
+                            created_cab=request.user  # L'administrateur qui a créé l'utilisateur
+                        )
                         # Authentification de l'utilisateur
                         if new_user is not None:
                             response_data["etat"] = True
@@ -352,6 +456,15 @@ def api_user_set_profil(request):
                     role = form.get("role")
                     if role:
                         user_from_data_base.role = role
+                        modifier = True
+
+                    # is_cabinet = form.get("is_cabinet")
+                    # if is_cabinet:
+                    #     user_from_data_base.is_cabinet = is_cabinet
+                    #     modifier = True
+
+                    if "is_cabinet" in form:
+                        user_from_data_base.is_cabinet = form["is_cabinet"]
                         modifier = True
 
                     pays = form.get("pays")
@@ -589,6 +702,55 @@ def api_user_all(request, uuid):
                     "last_name": user.last_name,
                     "email": user.email,
                     "is_admin": user.is_admin,
+                    "is_cabinet": user.is_cabinet,
+                    "is_superuser": user.is_superuser,
+                    "numero": user.numero,
+                }
+                for user in all_use
+            ]
+
+            response_data = {
+                "etat": True,
+                "message": "Utilisateurs récupérés avec succès",
+                "donnee": utilisateurs_data
+            }
+        else:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé ou non autorisé"
+            }
+    except Utilisateur.DoesNotExist:
+        response_data = {
+            "etat": False,
+            "message": "Utilisateur non trouvé"
+        }
+
+    return JsonResponse(response_data)
+
+
+@csrf_exempt
+@token_required
+def api_mes_user_all(request, uuid):
+    try:
+        # Récupérer l'utilisateur avec l'ID donné
+        utilisateur = Utilisateur.objects.filter(uuid=uuid).first()
+
+        if utilisateur and utilisateur.is_cabinet:
+            # Filtrer les utilisateurs sans `created_by`
+            all_use = Utilisateur.objects.filter(created_cab__isnull=False)
+
+            utilisateurs_data = [
+                {
+                    "avatar": user.avatar.url if user.avatar else None,
+                    "role": user.role,
+                    "id": user.id,
+                    "uuid": user.uuid,
+                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "email": user.email,
+                    "is_admin": user.is_admin,
+                    "is_cabinet": user.is_cabinet,
                     "is_superuser": user.is_superuser,
                     "numero": user.numero,
                 }
@@ -804,6 +966,7 @@ def api_user_get_profil(request, uuid):
         donnee["last_name"] = user_form_data_base.last_name
         donnee["username"] = user_form_data_base.username
         donnee["is_admin"] = user_form_data_base.is_admin
+        donnee["is_cabinet"] = user_form_data_base.is_cabinet
         donnee["is_superuser"] = user_form_data_base.is_superuser
 
         if user_form_data_base.avatar:
@@ -827,7 +990,7 @@ def api_user_get_profil(request, uuid):
 
 @csrf_exempt
 def api_forgot_password(request):
-    response_data = {'message': "requête invalide", 'etat': False}
+    response_data = {'message': "Requête invalide", 'etat': False}
 
     if request.method == "POST":
         try:
@@ -837,60 +1000,48 @@ def api_forgot_password(request):
             return JsonResponse(response_data)
 
         email = data.get("email")
-        # frontend_domain = data.get("frontend_domain")  # Recevoir le domaine du frontend
 
         if not email:
             response_data['message'] = "L'e-mail est requis"
             return JsonResponse(response_data)
 
-        # if not frontend_domain:
-        #     response_data['message'] = "Le domaine du frontend est requis"
-        #     return JsonResponse(response_data)
-
-        # Rechercher l'utilisateur par e-mail
         user = Utilisateur.objects.filter(email=email).first()
 
         if user:
-            # Générer le token et uid
+
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.id))
 
-            # Récupérer le domaine courant
+            # Récupérer le domaine du site (ex: localhost:8000 ou ton vrai domaine en prod)
             current_site = request.META.get("HTTP_HOST", "localhost")
+
             context = {
                 "token": token,
                 "uid": uid,
                 "domaine": f"http://{current_site}"
-                # "domaine": f"http://{frontend_domain}"  # Utiliser le domaine du frontend
             }
-            # send_mail(
-            #     'Contcat Form',
-            #     token,
-            #     'settings.EMAIL_HOST_USER',
-            #     [user.email]
-            # )
-            # Charger le template de l'e-mail
 
-            html_text = render_to_string("email.html", context)
+            html_message = render_to_string("email.html", context)
+
             try:
                 msg = EmailMessage(
-                    "Réinitialisation de mot de passe",
-                    html_text,
-                    "DiakiteDigital <cheicknadiakite99@gmail.com>",
-                    [user.email],
+                    subject="Réinitialisation de mot de passe",
+                    body=html_message,
+                    from_email="DiakiteDigital <info@diakitedigital.com>",
+                    to=[user.email],
                 )
-
-                msg.content_subtype = "html"
+                msg.content_subtype = "html"  # Important pour envoyer en HTML
                 msg.send()
+
                 response_data['message'] = "E-mail de réinitialisation envoyé"
                 response_data['etat'] = True
+
             except Exception as e:
                 response_data['message'] = f"Erreur lors de l'envoi de l'e-mail: {str(e)}"
         else:
             response_data['message'] = "Utilisateur non trouvé"
 
     return JsonResponse(response_data)
-
 
 # def update_password(request, token, uid):
 #     try:

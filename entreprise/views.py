@@ -2529,6 +2529,7 @@ def set_entre(request):
 
                     if "pu" in form:
                         livre_from_database.pu = form["pu"]
+                        livre_from_database.save(user=user)
                         modifier = True
 
                     if "pu_achat" in form:
@@ -2548,7 +2549,7 @@ def set_entre(request):
                         modifier = True
 
                     if modifier:
-                        livre_from_database.save()
+                        livre_from_database.save(user=user)
                         response_data["etat"] = True
                         response_data["message"] = "Success"
 
@@ -3953,13 +3954,12 @@ def get_utilisateur_entreprise_historique_supp(request, uuid, entreprise_uuid):
 
         # Récupérer tous les historiques d'entrer de cette entreprise
         historiques_entrer = HistoriqueEntrer.objects.filter(
-            utilisateur=utilisateur, entreprise=entreprise
+            entreprise=entreprise
         )
-        print(historiques_entrer)
 
         # Récupérer tous les historiques de sortie de cette entreprise
         historiques_sortie = HistoriqueSortie.objects.filter(
-            utilisateur=utilisateur, entreprise=entreprise
+            entreprise=entreprise
         )
 
         # Combiner les deux ensembles d'historiques et les trier par date

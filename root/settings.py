@@ -115,6 +115,14 @@ if True:
             'HOST': 'localhost',
             'PORT': '3306',
         }
+        # 'default': {
+        #     'ENGINE': 'django.db.backends.mysql',
+        #     'NAME': "dich5095_entreback",
+        #     'USER': "dich5095_entreback_user",
+        #     'PASSWORD': "Bonjourd@10",
+        #     'HOST': 'localhost',
+        #     'PORT': '3306',
+        # }
     }
 else:
     DATABASES = {
@@ -168,17 +176,33 @@ STATIC_ROOT = BASE_DIR / 'static'
 MEDIA_URL = "/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'mail.diakitedigital.com'
 EMAIL_USE_TLS = True
-EMAIL_PORT = 587
-EMAIL_HOST_USER = "cheicknadiakite99@gmail.com"
-EMAIL_HOST_PASSWORD = "cfsivqrowcjmelyq"
+EMAIL_PORT = 26
+EMAIL_HOST_USER = "info@diakitedigital.com"
+EMAIL_HOST_PASSWORD = "Bonjourd@10"
+
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_USE_TLS = True
+# EMAIL_PORT = 587
+# EMAIL_HOST_USER = "cheicknadiakite99@gmail.com"
+# EMAIL_HOST_PASSWORD = "cfsivqrowcjmelyq"
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 LOGIN_URL = '/utilisateur/connexion/'
 AUTH_USER_MODEL = "utilisateur.Utilisateur"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": "redis://localhost:6379/0",
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         }
+#     }
+# }
+

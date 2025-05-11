@@ -23,12 +23,17 @@ class Utilisateur(AbstractUser):
     created_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name='created_users')
 
+    created_cab = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='created_cabinets')
+
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     avatar = models.ImageField(null=True, blank=True)
     numero = models.CharField(max_length=200, unique=True)
     pays = models.CharField(max_length=100, blank=True, null=True)
 
     is_admin = models.BooleanField(default=False)
+    is_cabinet = models.BooleanField(default=False)
+
     email_user = models.EmailField(blank=True, null=True)
 
     role = models.PositiveSmallIntegerField(choices=choice, null=True, blank=True)
