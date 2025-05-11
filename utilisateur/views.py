@@ -1027,7 +1027,7 @@ def api_forgot_password(request):
                 msg = EmailMessage(
                     subject="Réinitialisation de mot de passe",
                     body=html_message,
-                    from_email="DiakiteDigital <info@diakitedigital.com>",
+                    from_email="DiakiteDigital<info@diakitedigital.com>",
                     to=[user.email],
                 )
                 msg.content_subtype = "html"  # Important pour envoyer en HTML
