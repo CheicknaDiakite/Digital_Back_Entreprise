@@ -430,7 +430,7 @@ def api_user_set_profil(request):
 
         modifier = False
         if user_conect:
-
+            print("uu ..", user_conect)
             if (user_conect.groups.filter(name="Admin").exists()
                     or user_conect.groups.filter(name="Editor").exists()
                     or user_conect.groups.filter(name="Editor").exists()

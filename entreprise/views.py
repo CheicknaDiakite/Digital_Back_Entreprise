@@ -721,61 +721,56 @@ def get_entreprise_utilisateurs(request, uuid):
 @token_required
 def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
     try:
-        # Récupérer l'utilisateur et l'entreprise
         utilisateur = Utilisateur.objects.get(uuid=user_id)
         entreprise = Entreprise.objects.get(uuid=entreprise_id, utilisateurs=utilisateur)
 
-        # Récupérer les catégories, sous-catégories, entrées et sorties
         categories = Categorie.objects.filter(entreprise=entreprise)
         souscategories = SousCategorie.objects.filter(categorie__in=categories)
         entrers = Entrer.objects.filter(souscategorie__in=souscategories)
         sorties = Sortie.objects.filter(entrer__in=entrers)
 
-        # Calculs des totaux
+        # Totaux globaux
         total_sortie_qte = sorties.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
         total_entrer_qte = entrers.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
         total_sortie_pu = sum(sortie.prix_total for sortie in sorties)
         total_entrer_pu = sum(entrer.prix_total for entrer in entrers)
 
-        # Comptage des enregistrements
         count_entrer = entrers.count()
         count_sortie = sorties.count()
 
-        # Récupérer les entrées comptées par mois (enregistrements)
+        # ➤ Nouveaux totaux groupés par mois pour les Entrées
+        details_entrer_par_mois = {}
+        for item in entrers.annotate(month=TruncMonth('created_at')).values('month').annotate(
+            somme_qte=Sum('qte'),
+            somme_prix_total=Sum('pu')
+        ).order_by('month'):
+            mois = item['month'].strftime("%B %Y")
+            details_entrer_par_mois[mois] = {
+                "somme_qte": item['somme_qte'],
+                "somme_prix_total": item['somme_prix_total']
+            }
+
+        # ➤ Nouveaux totaux groupés par mois pour les Sorties
+        details_sortie_par_mois = {}
+        for item in sorties.annotate(month=TruncMonth('created_at')).values('month').annotate(
+            somme_qte=Sum('qte'),
+            somme_prix_total=Sum('pu')
+        ).order_by('month'):
+            mois = item['month'].strftime("%B %Y")
+            details_sortie_par_mois[mois] = {
+                "somme_qte": item['somme_qte'],
+                "somme_prix_total": item['somme_prix_total']
+            }
+
+        # Comptages par mois (enregistrements)
         count_entrer_par_mois = entrers.annotate(month=TruncMonth('created_at')).values('month').annotate(
-            count=Count('id')).order_by('month')
+            count=Count('id')
+        ).order_by('month')
 
-        # Récupérer les sorties comptées par mois (enregistrements)
         count_sortie_par_mois = sorties.annotate(month=TruncMonth('created_at')).values('month').annotate(
-            count=Count('id')).order_by('month')
+            count=Count('id')
+        ).order_by('month')
 
-        # Récupérer les détails par mois pour les Entrées
-        details_entrer_par_mois = defaultdict(list)
-        for entrer in entrers.annotate(month=TruncMonth('created_at')):
-            month_name = datetime.strftime(entrer.month, "%B %Y")  # Ex: "December 2024"
-            details_entrer_par_mois[month_name].append({
-                "id": entrer.id,
-                "qte": entrer.qte,
-                "pu": entrer.pu,
-                "prix_total": entrer.prix_total,
-                "created_at": entrer.created_at,
-                # "souscategorie_nom": entrer.souscategorie.libelle
-            })
-
-        # Récupérer les détails par mois pour les Sorties
-        details_sortie_par_mois = defaultdict(list)
-        for sortie in sorties.annotate(month=TruncMonth('created_at')):
-            month_name = datetime.strftime(sortie.month, "%B %Y")  # Ex: "December 2024"
-            details_sortie_par_mois[month_name].append({
-                "id": sortie.id,
-                "qte": sortie.qte,
-                "pu": sortie.pu,
-                "prix_total": sortie.prix_total,
-                "created_at": sortie.created_at,
-                # "souscategorie_nom": sortie.entrer.souscategorie.libelle
-            })
-
-        # Construire la réponse avec les résultats
         data = {
             "somme_sortie_qte": total_sortie_qte,
             "somme_sortie_pu": total_sortie_pu,
@@ -783,19 +778,15 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
             "somme_entrer_pu": total_entrer_pu,
             "nombre_entrer": count_entrer,
             "nombre_sortie": count_sortie,
-            "details_entrer_par_mois": {
-                str(month): details for month, details in details_entrer_par_mois.items()
-            },
-            "details_sortie_par_mois": {
-                str(month): details for month, details in details_sortie_par_mois.items()
-            },
+            "details_entrer_par_mois": details_entrer_par_mois,
+            "details_sortie_par_mois": details_sortie_par_mois,
             "count_entrer_par_mois": list(count_entrer_par_mois),
             "count_sortie_par_mois": list(count_sortie_par_mois),
         }
 
         response_data = {
             "etat": True,
-            "message": "Quantité, prix et détails récupérés avec succès",
+            "message": "Quantité, prix et détails agrégés par mois récupérés avec succès",
             "donnee": data
         }
 
@@ -805,6 +796,99 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
         response_data = {"etat": False, "message": "Entreprise non trouvée pour cet utilisateur"}
 
     return JsonResponse(response_data)
+
+
+# @csrf_exempt
+# @token_required
+# def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
+#     try:
+#         # Récupérer l'utilisateur et l'entreprise
+#         utilisateur = Utilisateur.objects.get(uuid=user_id)
+#         entreprise = Entreprise.objects.get(uuid=entreprise_id, utilisateurs=utilisateur)
+#
+#         # Récupérer les catégories, sous-catégories, entrées et sorties
+#         categories = Categorie.objects.filter(entreprise=entreprise)
+#         souscategories = SousCategorie.objects.filter(categorie__in=categories)
+#         entrers = Entrer.objects.filter(souscategorie__in=souscategories)
+#         sorties = Sortie.objects.filter(entrer__in=entrers)
+#
+#         # Calculs des totaux
+#         total_sortie_qte = sorties.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
+#         total_entrer_qte = entrers.aggregate(total_qte=Sum('qte'))['total_qte'] or 0
+#         total_sortie_pu = sum(sortie.prix_total for sortie in sorties)
+#         total_entrer_pu = sum(entrer.prix_total for entrer in entrers)
+#
+#         # Comptage des enregistrements
+#         count_entrer = entrers.count()
+#         count_sortie = sorties.count()
+#
+#         # Récupérer les entrées comptées par mois (enregistrements)
+#         count_entrer_par_mois = entrers.annotate(
+#             month=TruncMonth('created_at')
+#         ).values('month').annotate(
+#             count=Count('id')
+#         ).order_by('month')
+#
+#         # Récupérer les sorties comptées par mois (enregistrements)
+#         count_sortie_par_mois = sorties.annotate(month=TruncMonth('created_at')).values('month').annotate(
+#             count=Count('id')).order_by('month')
+#
+#         # Récupérer les détails par mois pour les Entrées
+#         details_entrer_par_mois = defaultdict(list)
+#         for entrer in entrers.annotate(month=TruncMonth('created_at')):
+#             month_name = datetime.strftime(entrer.month, "%B %Y")  # Ex: "December 2024"
+#             details_entrer_par_mois[month_name].append({
+#                 "id": entrer.id,
+#                 "qte": entrer.qte,
+#                 "pu": entrer.pu,
+#                 "prix_total": entrer.prix_total,
+#                 "created_at": entrer.created_at,
+#                 # "souscategorie_nom": entrer.souscategorie.libelle
+#             })
+#
+#         # Récupérer les détails par mois pour les Sorties
+#         details_sortie_par_mois = defaultdict(list)
+#         for sortie in sorties.annotate(month=TruncMonth('created_at')):
+#             month_name = datetime.strftime(sortie.month, "%B %Y")  # Ex: "December 2024"
+#             details_sortie_par_mois[month_name].append({
+#                 "id": sortie.id,
+#                 "qte": sortie.qte,
+#                 "pu": sortie.pu,
+#                 "prix_total": sortie.prix_total,
+#                 "created_at": sortie.created_at,
+#                 # "souscategorie_nom": sortie.entrer.souscategorie.libelle
+#             })
+#
+#         # Construire la réponse avec les résultats
+#         data = {
+#             "somme_sortie_qte": total_sortie_qte,
+#             "somme_sortie_pu": total_sortie_pu,
+#             "somme_entrer_qte": total_entrer_qte,
+#             "somme_entrer_pu": total_entrer_pu,
+#             "nombre_entrer": count_entrer,
+#             "nombre_sortie": count_sortie,
+#             "details_entrer_par_mois": {
+#                 str(month): details for month, details in details_entrer_par_mois.items()
+#             },
+#             "details_sortie_par_mois": {
+#                 str(month): details for month, details in details_sortie_par_mois.items()
+#             },
+#             "count_entrer_par_mois": list(count_entrer_par_mois),
+#             "count_sortie_par_mois": list(count_sortie_par_mois),
+#         }
+#
+#         response_data = {
+#             "etat": True,
+#             "message": "Quantité, prix et détails récupérés avec succès",
+#             "donnee": data
+#         }
+#
+#     except Utilisateur.DoesNotExist:
+#         response_data = {"etat": False, "message": "Utilisateur non trouvé"}
+#     except Entreprise.DoesNotExist:
+#         response_data = {"etat": False, "message": "Entreprise non trouvée pour cet utilisateur"}
+#
+#     return JsonResponse(response_data)
 
 
 class ExtractWeek(Func):
@@ -817,65 +901,59 @@ class ExtractWeek(Func):
 @token_required
 def sous_categories_sorties_par_mois(request, entreprise_uuid):
     try:
-        # Récupérer la date actuelle et le début de l'année
         date_actuelle = now()
         debut_annee = date_actuelle.replace(month=1, day=1)
 
-        # Récupérer l'entreprise
         entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
 
-        # Filtrer les sorties
         sorties = Sortie.objects.filter(
             entrer__souscategorie__categorie__entreprise=entreprise,
             created_at__gte=debut_annee
         ).select_related('entrer__souscategorie')
 
-        # Annoter et regrouper par mois et sous-catégorie
         sorties_par_mois = sorties.annotate(
-            mois=TruncMonth('created_at')  # Annoter avec le mois
+            mois=TruncMonth('created_at')
         ).values(
-            'mois',  # Inclure le mois dans le regroupement
+            'mois',
             'entrer__souscategorie__libelle'
-        ).annotate(nombre_sorties=Count('id')).order_by('mois')
+        ).annotate(
+            somme_qte=Sum('qte')  # ➤ Remplace Count par Sum ici
+        ).order_by('mois')
 
-        # Organiser les données par mois en une liste
         resultats_par_mois = []
         mois_actuel = None
         details = []
 
         for sortie in sorties_par_mois:
-            mois = sortie['mois'].strftime("%B %Y")  # Ex : "January 2024"
+            mois = sortie['mois'].strftime("%B %Y")
 
-            # Si c'est un nouveau mois, ajouter les détails du mois précédent
             if mois_actuel and mois_actuel != mois:
                 resultats_par_mois.append({
                     "month": mois_actuel,
                     "details": details
                 })
-                details = []  # Réinitialiser les détails
+                details = []
 
-            # Ajouter les détails de la sortie courante
             details.append({
                 "libelle": sortie['entrer__souscategorie__libelle'],
-                "count": sortie['nombre_sorties']
+                "somme_qte": sortie['somme_qte']  # ➤ Nouveau champ
             })
             mois_actuel = mois
 
-        # Ajouter le dernier mois traité
         if mois_actuel:
             resultats_par_mois.append({
                 "month": mois_actuel,
                 "details": details
             })
 
-        # Construire la réponse
         data = {
             "annee": debut_annee.year,
             "sorties_par_mois": resultats_par_mois
         }
+
         response_data = {
             "etat": True,
-            "message": "Données des sorties par mois récupérées avec succès",
+            "message": "Données des quantités de sorties par mois récupérées avec succès",
             "donnee": data
         }
 
@@ -885,6 +963,80 @@ def sous_categories_sorties_par_mois(request, entreprise_uuid):
         response_data = {"etat": False, "message": str(e)}
 
     return JsonResponse(response_data, safe=False)
+
+
+# @csrf_exempt
+# @token_required
+# def sous_categories_sorties_par_mois(request, entreprise_uuid):
+#     try:
+#         # Récupérer la date actuelle et le début de l'année
+#         date_actuelle = now()
+#         debut_annee = date_actuelle.replace(month=1, day=1)
+#
+#         # Récupérer l'entreprise
+#         entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
+#
+#         # Filtrer les sorties
+#         sorties = Sortie.objects.filter(
+#             entrer__souscategorie__categorie__entreprise=entreprise,
+#             created_at__gte=debut_annee
+#         ).select_related('entrer__souscategorie')
+#
+#         # Annoter et regrouper par mois et sous-catégorie
+#         sorties_par_mois = sorties.annotate(
+#             mois=TruncMonth('created_at')  # Annoter avec le mois
+#         ).values(
+#             'mois',  # Inclure le mois dans le regroupement
+#             'entrer__souscategorie__libelle'
+#         ).annotate(nombre_sorties=Count('id')).order_by('mois')
+#
+#         # Organiser les données par mois en une liste
+#         resultats_par_mois = []
+#         mois_actuel = None
+#         details = []
+#
+#         for sortie in sorties_par_mois:
+#             mois = sortie['mois'].strftime("%B %Y")  # Ex : "January 2024"
+#
+#             # Si c'est un nouveau mois, ajouter les détails du mois précédent
+#             if mois_actuel and mois_actuel != mois:
+#                 resultats_par_mois.append({
+#                     "month": mois_actuel,
+#                     "details": details
+#                 })
+#                 details = []  # Réinitialiser les détails
+#
+#             # Ajouter les détails de la sortie courante
+#             details.append({
+#                 "libelle": sortie['entrer__souscategorie__libelle'],
+#                 "count": sortie['nombre_sorties']
+#             })
+#             mois_actuel = mois
+#
+#         # Ajouter le dernier mois traité
+#         if mois_actuel:
+#             resultats_par_mois.append({
+#                 "month": mois_actuel,
+#                 "details": details
+#             })
+#
+#         # Construire la réponse
+#         data = {
+#             "annee": debut_annee.year,
+#             "sorties_par_mois": resultats_par_mois
+#         }
+#         response_data = {
+#             "etat": True,
+#             "message": "Données des sorties par mois récupérées avec succès",
+#             "donnee": data
+#         }
+#
+#     except Entreprise.DoesNotExist:
+#         response_data = {"etat": False, "message": "Entreprise non trouvée"}
+#     except Exception as e:
+#         response_data = {"etat": False, "message": str(e)}
+#
+#     return JsonResponse(response_data, safe=False)
 
 
 # @csrf_exempt
