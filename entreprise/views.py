@@ -800,6 +800,181 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
 
 # @csrf_exempt
 # @token_required
+# def api_count_sortie_par_utilisateur(request, entreprise_id):
+#     try:
+#         entreprise = Entreprise.objects.get(uuid=entreprise_id)
+#     except Entreprise.DoesNotExist:
+#         return JsonResponse({'etat': False, 'message': "Entreprise non trouvée"})
+#
+#     # Base queryset des sorties de l'entreprise
+#     qs = Sortie.objects.filter(
+#         entrer__souscategorie__categorie__entreprise=entreprise
+#     ).select_related('created_by')
+#
+#     # ————————————————————————————
+#     # 1) Total des qte vendues par utilisateur
+#     # ————————————————————————————
+#     total_par_user = (
+#         qs
+#         .values('created_by__username')
+#         .annotate(total_qte=Sum('qte'))
+#         .order_by('-total_qte')
+#     )
+#     # formaté en liste de { username, total_qte }
+#     total_par_utilisateur = [
+#         {'username': rec['created_by__username'], 'total_qte': rec['total_qte'] or 0}
+#         for rec in total_par_user
+#     ]
+#
+#     total_par_user = (
+#         qs.values('created_by__id', 'created_by__username')
+#         .annotate(total=Count('id'))
+#         .order_by('-total')
+#     )
+#
+#     # ————————————————————————————
+#     # 2) Total des qte vendues par utilisateur **par mois**
+#     # ————————————————————————————
+#     qs_monthly = (
+#         qs
+#         .annotate(mois=TruncMonth('created_at'))
+#         .values('created_by__username', 'mois')
+#         .annotate(somme_qte=Sum('qte'))
+#         .order_by('created_by__username', 'mois')
+#     )
+#
+#     mensuel_par_utilisateur = [
+#         {
+#             'username': rec['created_by__username'] or "Inconnu",
+#             'mois': rec['mois'].strftime("%B %Y"),
+#             'total_qte': rec['somme_qte'] or 0
+#         }
+#         for rec in qs_monthly
+#     ]
+#
+#     data = {
+#         'total_par_utilisateur': total_par_utilisateur,
+#         'total_nombre_vente': list(total_par_user),
+#         # 'mensuel_par_utilisateur': mensuel_par_utilisateur,
+#     }
+#
+#     return JsonResponse({
+#         'etat': True,
+#         'message': "Somme des quantités vendues par utilisateur (total et mensuel)",
+#         'donnee': data
+#     })
+
+@csrf_exempt
+@token_required
+def api_count_sortie_par_utilisateur(request, entreprise_id):
+    try:
+        entreprise = Entreprise.objects.get(uuid=entreprise_id)
+    except Entreprise.DoesNotExist:
+        return JsonResponse({'etat': False, 'message': "Entreprise non trouvée"})
+
+    # Base queryset des sorties de l'entreprise
+    qs = Sortie.objects.filter(
+        entrer__souscategorie__categorie__entreprise=entreprise
+    ).select_related('created_by')
+
+    # ————————————————————————————
+    # 1) Total des qte vendues par utilisateur
+    # ————————————————————————————
+    total_par_user = (
+        qs
+        .values('created_by__username')
+        .annotate(total_qte=Sum('qte'))
+        .order_by('-total_qte')
+    )
+    # formaté en liste de { username, total_qte }
+    total_par_utilisateur = [
+        {'username': rec['created_by__username'], 'total_qte': rec['total_qte'] or 0}
+        for rec in total_par_user
+    ]
+
+    total_par_user = (
+        qs.values('created_by__id', 'created_by__username')
+        .annotate(total=Count('id'))
+        .order_by('-total')
+    )
+
+    # ————————————————————————————
+    # 2) Total des qte vendues par utilisateur **par mois**
+    # ————————————————————————————
+    qs_monthly = (
+        qs
+        .annotate(mois=TruncMonth('created_at'))
+        .values('created_by__username', 'mois')
+        .annotate(somme_qte=Sum('qte'))
+        .order_by('created_by__username', 'mois')
+    )
+
+    # mensuel_par_utilisateur = [
+    #     {
+    #         'username': rec['created_by__username'] or "Inconnu",
+    #         'mois': rec['mois'].strftime("%B %Y"),
+    #         'total_qte': rec['somme_qte'] or 0
+    #     }
+    #     for rec in qs_monthly
+    # ]
+
+    # Pour affichage en français
+    # try:
+    #     locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
+    # except locale.Error:
+    #     pass
+
+    # Structure : { "Janvier 2025": [ {username, total_qte}, ... ] }
+    donnees_par_mois = defaultdict(list)
+
+    for rec in qs_monthly:
+        mois_str = rec['mois'].strftime('%B %Y').capitalize()
+
+        donnees_par_mois[mois_str].append({
+            'username': rec['created_by__username'] or "Inconnu",
+            'total_qte': rec['somme_qte'] or 0
+        })
+
+    resultats_par_mois = []
+    mois_actuel = None
+    details = []
+
+    for rec in qs_monthly:
+        mois = rec['mois'].strftime("%B %Y")
+
+        if mois_actuel and mois_actuel != mois:
+            resultats_par_mois.append({
+                "month": mois_actuel,
+                "details": details
+            })
+            details = []
+
+        details.append({
+            'username': rec['created_by__username'] or "Inconnu",
+            'total_qte': rec['somme_qte'] or 0
+        })
+        mois_actuel = mois
+
+    if mois_actuel:
+        resultats_par_mois.append({
+            "month": mois_actuel,
+            "details": details
+        })
+
+    data = {
+        'total_par_utilisateur': total_par_utilisateur,
+        'total_nombre_vente': list(total_par_user),
+        'mensuel_par_utilisateur': resultats_par_mois,
+    }
+
+    return JsonResponse({
+        'etat': True,
+        'message': "Somme des quantités vendues par utilisateur (total et mensuel)",
+        'donnee': data
+    })
+
+# @csrf_exempt
+# @token_required
 # def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
 #     try:
 #         # Récupérer l'utilisateur et l'entreprise
@@ -2409,6 +2584,53 @@ def get_depenses_entreprise(request, uuid, entreprise_id):
     return JsonResponse(response_data)
 
 
+@csrf_exempt
+@token_required
+def get_depenses_somme(request, uuid, entreprise_id):
+    try:
+        utilisateur = Utilisateur.objects.get(uuid=uuid)
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
+
+        if not entreprise:
+            return JsonResponse({
+                "etat": False,
+                "message": "Entreprise non trouvée ou non associée à l'utilisateur"
+            })
+
+        # Groupement des dépenses par mois et somme des montants
+        depenses_par_mois = (
+            Depense.objects
+            .filter(entreprise=entreprise)
+            .annotate(mois=TruncMonth('date'))  # tronquer à l'année + mois
+            .values('mois')
+            .annotate(total=Sum('somme'))
+            .order_by('mois')
+        )
+
+        # Préparer les données
+        depenses_data = [
+            {
+                "mois": dep["mois"].strftime("%Y-%m"),  # format lisible
+                "total": float(dep["total"]) if dep["total"] else 0
+            }
+            for dep in depenses_par_mois
+        ]
+
+        response_data = {
+            "etat": True,
+            "message": "Somme des dépenses par mois récupérée avec succès",
+            "donnee": depenses_data
+        }
+
+    except Utilisateur.DoesNotExist:
+        response_data = {
+            "etat": False,
+            "message": "Utilisateur non trouvé"
+        }
+
+    return JsonResponse(response_data)
+
+
 # Entrer
 
 @csrf_exempt
@@ -3022,7 +3244,7 @@ def add_sortie(request):
                     entrer = Entrer.objects.all().filter(uuid=entrer_id).first()
 
                     if entrer:
-                        new_livre = Sortie(qte=qte, pu=pu, entrer=entrer)
+                        new_livre = Sortie(qte=qte, pu=pu, entrer=entrer, created_by=admin)
 
                         # Ajout du client si client_id est fourni et valide
                         # if client_id:

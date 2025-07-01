@@ -453,6 +453,13 @@ class HistoriqueEntrer(models.Model):
 
 
 class Sortie(models.Model):
+    created_by = models.ForeignKey(
+        Utilisateur,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sorties_creees'
+    )
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     entrer = models.ForeignKey(Entrer, on_delete=models.CASCADE)
 

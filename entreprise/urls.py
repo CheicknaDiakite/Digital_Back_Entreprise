@@ -12,7 +12,7 @@ from .views import add_entreprise, del_entreprise, get_entreprise, add_categorie
     get_client_un, set_client, set_categorie, del_client, get_entre, get_sortie_un, del_sortie, get_sous_categorie_un, \
     del_sous_categorie, set_sous_categorie, set_entre, ordre_paiement, pay_entreprise_get_historique, \
     paiement_entreprise_callback, add_avis, get_avis, del_avis, sous_categories_sorties_par_mois, update_sorties, \
-    update_fac_sorties
+    update_fac_sorties, api_count_sortie_par_utilisateur, get_depenses_somme
 
 urlpatterns = [
     path("add", add_entreprise, name="add_bibliotheque"),
@@ -24,6 +24,9 @@ urlpatterns = [
     path("get_utilisateur_entreprise/<uuid:uuid>", get_utilisateur_entreprise, name="add_bibliotheque"),
     path("get_entreprise_utilisateurs/<uuid:uuid>", get_entreprise_utilisateurs, name="add_bibliotheque"),
     path("api_somme_sortie/<uuid:entreprise_id>/<uuid:user_id>", api_somme_qte_pu_sortie, name="api_somme_sortie"),
+    path("api_count_sortie_par_utilisateur/<uuid:entreprise_id>", api_count_sortie_par_utilisateur,
+         name="api_count_sortie_par_utilisateur"),
+
     path('sous-categories-sorties/<uuid:entreprise_uuid>', sous_categories_sorties_par_mois, name='sous_categories_sorties'),
 
     path("client/add", add_client, name="add_bibliotheque"),
@@ -56,6 +59,7 @@ urlpatterns = [
     path("depense/del", del_depense, name="del_sous_categorie"),
     path("depense/get/<uuid:uuid>", get_depense_un, name="get_sous_categorie_un"),
     path("depense/get_depenses_entreprise/<uuid:uuid>/<uuid:entreprise_id>", get_depenses_entreprise, name="get_sous_categorie_un"),
+    path("depense/get_depenses_somme/<uuid:uuid>/<uuid:entreprise_id>", get_depenses_somme, name="get_depenses_somme"),
 
     path("entre/add", add_entre, name="add_sous_categorie"),
     path("entre/del", del_entre, name="del_sous_categorie"),

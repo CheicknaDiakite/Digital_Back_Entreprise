@@ -50,25 +50,17 @@ CKEDITOR_CONFIGS = {
         'width': 'auto',
         'allowedContent': True,  # Permet de conserver tous les styles HTML
     },
-    # 'default': {
-    #     'ENGINE': 'django.db.backends.mysql',
-    #     'NAME': "sc1dich5095_geststocks",
-    #     'USER': "sc1dich5095_geststocks_user",
-    #     'PASSWORD': "Bonjour@#0",
-    #     'HOST': 'localhost',
-    #     'PORT': '3306',
-    # }
 }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'root.urls'
@@ -96,11 +88,33 @@ WSGI_APPLICATION = 'root.wsgi.application'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:4173",
-    "https://front.diakitedigital.com",
-    "https://www.front.diakitedigital.com",
+    "https://test.diakitedigital.com",
+    "https://www.test.diakitedigital.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Ajout des configurations CORS supplémentaires
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -115,11 +129,23 @@ if True:
             'HOST': 'localhost',
             'PORT': '3306',
         }
+
+        # Pour gest-stocks.com
         # 'default': {
         #     'ENGINE': 'django.db.backends.mysql',
         #     'NAME': "dich5095_entreback",
         #     'USER': "dich5095_entreback_user",
         #     'PASSWORD': "Bonjourd@10",
+        #     'HOST': 'localhost',
+        #     'PORT': '3306',
+        # }
+
+        # Pour le back.diakitedigital.com
+        # 'default': {
+        #     'ENGINE': 'django.db.backends.mysql',
+        #     'NAME': "dich5095_entreback",
+        #     'USER': "dich5095_entreback_user",
+        #     'PASSWORD': "Bonjour@#0",
         #     'HOST': 'localhost',
         #     'PORT': '3306',
         # }
