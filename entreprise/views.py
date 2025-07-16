@@ -754,7 +754,7 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
         details_sortie_par_mois = {}
         for item in sorties.annotate(month=TruncMonth('created_at')).values('month').annotate(
             somme_qte=Sum('qte'),
-            somme_prix_total=Sum('pu')
+            somme_prix_total=Sum(F('pu') * F('qte'))
         ).order_by('month'):
             mois = item['month'].strftime("%B %Y")
             details_sortie_par_mois[mois] = {
