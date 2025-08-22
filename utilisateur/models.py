@@ -3,6 +3,7 @@ import string
 import uuid
 
 from django.contrib.auth.models import AbstractUser, Permission, Group
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -26,7 +27,7 @@ class Utilisateur(AbstractUser):
     created_cab = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL,
                                     related_name='created_cabinets')
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, null=True, blank=True)
     avatar = models.ImageField(null=True, blank=True)
     numero = models.CharField(max_length=200, unique=True)
     pays = models.CharField(max_length=100, blank=True, null=True)
@@ -40,9 +41,6 @@ class Utilisateur(AbstractUser):
 
     # boutiques = models.ManyToManyField('Boutique', related_name='utilisateurs',
     #                                    blank=True)  # Relation optionnelle
-
-    def __str__(self):
-        return f"{self.first_name} ({self.username})"
 
     def save(self, *args, **kwargs):
 

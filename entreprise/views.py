@@ -8,10 +8,15 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum, Q, Count, F, Func, IntegerField
 from django.db.models.functions import TruncWeek, TruncMonth
 from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from fonction import token_required
 
@@ -25,6 +30,8 @@ from root.code_paiement import entreprise_order_id_len
 
 from root.outil import get_order_id, verifier_numero, paiement_orange, paiement_moov, sama_pay, stripe_pay, \
     verifier_status
+from .serializers import CategorieSerializer, EntrepriseSerializer, ClientSerializer, DepenseSerializer, \
+    EntrerSerializer, SortieSerializer
 
 
 def handel404(request, exception):
@@ -35,8 +42,8 @@ def handel404(request, exception):
 
 # Pour les avis
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_avis(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -78,8 +85,8 @@ def add_avis(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_avis(request):
     response_data = {'message': "Requete invalide", 'etat': False, 'donnee': []}
 
@@ -131,8 +138,8 @@ def get_avis(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_avis(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -174,77 +181,91 @@ def del_avis(request):
 
 # Pour les Entreprise
 
-@csrf_exempt
-@token_required
-def add_entreprise(request):
-    response_data = {'message': "requête invalide", 'etat': False}
+# @csrf_exempt
+# @token_required
+# def add_entreprise(request):
+#     response_data = {'message': "requête invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         try:
+#             form = json.loads(request.body.decode("utf-8"))
+#         except json.JSONDecodeError:
+#             return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+#
+#         nom = form.get("nom")
+#         adresse = form.get("adresse")
+#         numero = form.get("numero")
+#         email = form.get("email")
+#         libelle = form.get("libelle")
+#         user_id = form.get("user_id")
+#         type_licence = form.get("type_licence", 1)  # Licence par défaut
+#         user = Utilisateur.objects.filter(uuid=user_id).first()
+#
+#         if user:
+#
+#             if user.entreprises.count() >= 3:
+#                 response_data["message"] = "Vous possédez déjà plus de 3 entreprises."
+#                 return JsonResponse(response_data)
+#
+#             # Créer une licence associée à la entreprise
+#             if type_licence == 1:
+#                 date_expiration = datetime.now().date() + timedelta(days=30)  # Licence gratuite de 30 jours
+#             elif type_licence == 2:
+#                 date_expiration = datetime.now().date() + timedelta(days=180)  # Licence de 6 mois
+#             elif type_licence == 3:
+#                 date_expiration = datetime.now().date() + timedelta(days=365)  # Licence d'un an
+#             else:
+#                 response_data['message'] = "Type de licence invalide."
+#                 return JsonResponse(response_data)
+#
+#             # Créer et associer la licence à la entreprise
+#             licence = Licence.objects.create(type=type_licence, date_expiration=date_expiration)
+#
+#             # Vérification des permissions de l'utilisateur
+#             # if user.has_perm('entreprise.add_entreprise'):
+#             if user.groups.filter(name="Admin").exists():
+#
+#                 entreprise = Entreprise.objects.create(
+#                     nom=nom,
+#                     adresse=adresse,
+#                     libelle=libelle,
+#                     numero=numero,
+#                     email=email,
+#                     licence=licence
+#                 )
+#
+#                 entreprise.utilisateurs.add(user)
+#
+#                 response_data["etat"] = True
+#                 response_data["id"] = entreprise.id
+#                 # response_data["slug"] = new_entreprise.slug
+#                 response_data["message"] = "success"
+#             else:
+#                 # L'utilisateur n'a pas la permission d'ajouter une catégorie
+#                 response_data["message"] = "Vous n'avez pas la permission d'ajouter une entreprise."
+#         else:
+#             response_data["message"] = "Utilisateur non trouvé."
+#
+#         # Autres cas d'erreurs...
+#     return JsonResponse(response_data)
 
-    if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+class AddEntrepriseView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = EntrepriseSerializer(data=request.data)
+        if serializer.is_valid():
+            entreprise = serializer.save()
+            return Response({
+                "etat": True,
+                "id": entreprise.id,
+                "message": "success"
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "etat": False,
+            "message": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        nom = form.get("nom")
-        adresse = form.get("adresse")
-        numero = form.get("numero")
-        email = form.get("email")
-        libelle = form.get("libelle")
-        user_id = form.get("user_id")
-        type_licence = form.get("type_licence", 1)  # Licence par défaut
-        user = Utilisateur.objects.filter(uuid=user_id).first()
-
-        if user:
-
-            if user.entreprises.count() >= 3:
-                response_data["message"] = "Vous possédez déjà plus de 3 entreprises."
-                return JsonResponse(response_data)
-
-            # Créer une licence associée à la entreprise
-            if type_licence == 1:
-                date_expiration = datetime.now().date() + timedelta(days=30)  # Licence gratuite de 30 jours
-            elif type_licence == 2:
-                date_expiration = datetime.now().date() + timedelta(days=180)  # Licence de 6 mois
-            elif type_licence == 3:
-                date_expiration = datetime.now().date() + timedelta(days=365)  # Licence d'un an
-            else:
-                response_data['message'] = "Type de licence invalide."
-                return JsonResponse(response_data)
-
-            # Créer et associer la licence à la entreprise
-            licence = Licence.objects.create(type=type_licence, date_expiration=date_expiration)
-
-            # Vérification des permissions de l'utilisateur
-            # if user.has_perm('entreprise.add_entreprise'):
-            if user.groups.filter(name="Admin").exists():
-
-                entreprise = Entreprise.objects.create(
-                    nom=nom,
-                    adresse=adresse,
-                    libelle=libelle,
-                    numero=numero,
-                    email=email,
-                    licence=licence
-                )
-
-                entreprise.utilisateurs.add(user)
-
-                response_data["etat"] = True
-                response_data["id"] = entreprise.id
-                # response_data["slug"] = new_entreprise.slug
-                response_data["message"] = "success"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission d'ajouter une entreprise."
-        else:
-            response_data["message"] = "Utilisateur non trouvé."
-
-        # Autres cas d'erreurs...
-    return JsonResponse(response_data)
-
-
-@csrf_exempt
-@token_required
+@api_view(["Get"])
+@permission_classes([IsAuthenticated])
 def get_entreprise_un(request, uuid):
     response_data = {'message': "requette invalide", 'etat': False}
     entreprise = Entreprise.objects.all().filter(uuid=uuid).first()
@@ -291,8 +312,8 @@ def get_entreprise_un(request, uuid):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def remove_user_from_entreprise(request):
     response_data = {'message': "Requête invalide", 'etat': False}
 
@@ -337,8 +358,8 @@ def remove_user_from_entreprise(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_entreprise(request):
     response_data = {'message': "Requête invalide", 'etat': False}
 
@@ -443,8 +464,8 @@ def del_entreprise(request):
 #     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_entreprise(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -512,8 +533,8 @@ def get_entreprise(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_entreprise(request):
     response_data = {'message': "requête invalide", 'etat': False}
 
@@ -613,8 +634,8 @@ def set_entreprise(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_utilisateur_entreprise(request, uuid):
     try:
         # Récupérer l'utilisateur avec l'ID donné
@@ -679,46 +700,45 @@ def get_utilisateur_entreprise(request, uuid):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_entreprise_utilisateurs(request, uuid):
-    try:
-        # Récupérer la entreprise avec l'ID donné
-        entreprise = Entreprise.objects.get(uuid=uuid)
+class EntrepriseUtilisateursView(APIView):
+    def get(self, request, uuid):
+        try:
+            # Récupérer la entreprise avec l'ID donné
+            entreprise = Entreprise.objects.get(uuid=uuid)
 
-        # Récupérer tous les utilisateurs associés à cette entreprise
-        utilisateurs = entreprise.utilisateurs.all()
+            # Récupérer tous les utilisateurs associés à cette entreprise
+            utilisateurs = entreprise.utilisateurs.all()
 
-        # Préparer les données de la réponse
-        utilisateurs_data = [
-            {
-                "id": utilisateur.id,
-                "uuid": utilisateur.uuid,
-                "username": utilisateur.username,
-                "email": utilisateur.email,
-                "first_name": utilisateur.first_name,
-                "last_name": utilisateur.last_name,
-                "role": utilisateur.get_role_display(),
+            # Préparer les données de la réponse
+            utilisateurs_data = [
+                {
+                    "id": utilisateur.id,
+                    "uuid": utilisateur.uuid,
+                    "username": utilisateur.username,
+                    "email": utilisateur.email,
+                    "first_name": utilisateur.first_name,
+                    "last_name": utilisateur.last_name,
+                    "role": utilisateur.get_role_display(),
+                }
+                for utilisateur in utilisateurs
+            ]
+
+            response_data = {
+                "etat": True,
+                "message": "Utilisateurs récupérés avec succès",
+                "donnee": utilisateurs_data
             }
-            for utilisateur in utilisateurs
-        ]
+        except Entreprise.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Entreprise non trouvée"
+            }
 
-        response_data = {
-            "etat": True,
-            "message": "Utilisateurs récupérés avec succès",
-            "donnee": utilisateurs_data
-        }
-    except Entreprise.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Entreprise non trouvée"
-        }
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
     try:
         utilisateur = Utilisateur.objects.get(uuid=user_id)
@@ -864,8 +884,8 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
 #         'donnee': data
 #     })
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_count_sortie_par_utilisateur(request, entreprise_id):
     try:
         entreprise = Entreprise.objects.get(uuid=entreprise_id)
@@ -973,6 +993,7 @@ def api_count_sortie_par_utilisateur(request, entreprise_id):
         'donnee': data
     })
 
+
 # @csrf_exempt
 # @token_required
 # def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
@@ -1072,8 +1093,8 @@ class ExtractWeek(Func):
     output_field = IntegerField()  # Utilisez IntegerField pour la sortie
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def sous_categories_sorties_par_mois(request, entreprise_uuid):
     try:
         date_actuelle = now()
@@ -1140,249 +1161,81 @@ def sous_categories_sorties_par_mois(request, entreprise_uuid):
     return JsonResponse(response_data, safe=False)
 
 
-# @csrf_exempt
-# @token_required
-# def sous_categories_sorties_par_mois(request, entreprise_uuid):
-#     try:
-#         # Récupérer la date actuelle et le début de l'année
-#         date_actuelle = now()
-#         debut_annee = date_actuelle.replace(month=1, day=1)
-#
-#         # Récupérer l'entreprise
-#         entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
-#
-#         # Filtrer les sorties
-#         sorties = Sortie.objects.filter(
-#             entrer__souscategorie__categorie__entreprise=entreprise,
-#             created_at__gte=debut_annee
-#         ).select_related('entrer__souscategorie')
-#
-#         # Annoter et regrouper par mois et sous-catégorie
-#         sorties_par_mois = sorties.annotate(
-#             mois=TruncMonth('created_at')  # Annoter avec le mois
-#         ).values(
-#             'mois',  # Inclure le mois dans le regroupement
-#             'entrer__souscategorie__libelle'
-#         ).annotate(nombre_sorties=Count('id')).order_by('mois')
-#
-#         # Organiser les données par mois en une liste
-#         resultats_par_mois = []
-#         mois_actuel = None
-#         details = []
-#
-#         for sortie in sorties_par_mois:
-#             mois = sortie['mois'].strftime("%B %Y")  # Ex : "January 2024"
-#
-#             # Si c'est un nouveau mois, ajouter les détails du mois précédent
-#             if mois_actuel and mois_actuel != mois:
-#                 resultats_par_mois.append({
-#                     "month": mois_actuel,
-#                     "details": details
-#                 })
-#                 details = []  # Réinitialiser les détails
-#
-#             # Ajouter les détails de la sortie courante
-#             details.append({
-#                 "libelle": sortie['entrer__souscategorie__libelle'],
-#                 "count": sortie['nombre_sorties']
-#             })
-#             mois_actuel = mois
-#
-#         # Ajouter le dernier mois traité
-#         if mois_actuel:
-#             resultats_par_mois.append({
-#                 "month": mois_actuel,
-#                 "details": details
-#             })
-#
-#         # Construire la réponse
-#         data = {
-#             "annee": debut_annee.year,
-#             "sorties_par_mois": resultats_par_mois
-#         }
-#         response_data = {
-#             "etat": True,
-#             "message": "Données des sorties par mois récupérées avec succès",
-#             "donnee": data
-#         }
-#
-#     except Entreprise.DoesNotExist:
-#         response_data = {"etat": False, "message": "Entreprise non trouvée"}
-#     except Exception as e:
-#         response_data = {"etat": False, "message": str(e)}
-#
-#     return JsonResponse(response_data, safe=False)
+class ClientCreateView(APIView):
+    """
+    Vue DRF pour créer un client
+    """
 
-
-# @csrf_exempt
-# @token_required
-# def sous_categories_sorties_par_semaine(request, entreprise_uuid):
-#     # Récupérer la date actuelle et calculer le début de la semaine
-#     date_actuelle = now()
-#     debut_semaine = date_actuelle - timedelta(days=date_actuelle.weekday())
-#
-#     # Filtrer les sorties en fonction de l'utilisateur, de l'entreprise et de la période (cette semaine)
-#     sorties = Sortie.objects.filter(
-#         entrer__souscategorie__categorie__entreprise__uuid=entreprise_uuid,
-#         created_at__gte=debut_semaine
-#     ).select_related('entrer__souscategorie')
-#
-#     # Annoter et compter les sorties par sous-catégorie
-#     sorties_par_sous_categorie = sorties.values(
-#         'entrer__souscategorie__libelle'
-#     ).annotate(nombre_sorties=Count('id'))
-#
-#     # Construire une réponse JSON
-#     data = {
-#         "date_debut_semaine": debut_semaine.strftime('%Y-%m-%d'),
-#         "date_fin_semaine": date_actuelle.strftime('%Y-%m-%d'),
-#         "sous_categories_sorties": list(sorties_par_sous_categorie)
-#     }
-#     print("tes ", data)
-#     return JsonResponse(data, safe=False)
-
-# @csrf_exempt
-# @token_required
-# def sous_categories_sorties_par_semaine(request, entreprise_uuid):
-#     # Récupérer la date actuelle et calculer le début de l'année
-#     date_actuelle = now()
-#     debut_annee = date_actuelle.replace(month=1, day=1)
-#
-#     # Vérification de l'existence de l'entreprise
-#     entreprise = Entreprise.objects.filter(uuid=entreprise_uuid).first()
-#     if not entreprise:
-#         return JsonResponse({"error": "Entreprise non trouvée"}, status=404)
-#
-#     # Filtrer les sorties
-#     sorties = Sortie.objects.filter(
-#         entrer__souscategorie__categorie__entreprise=entreprise,
-#         created_at__gte=debut_annee
-#     ).select_related('entrer__souscategorie')
-#
-#     # Annoter et regrouper par semaine et sous-catégorie
-#     sorties_par_semaine = sorties.annotate(
-#         semaine=ExtractWeek('created_at')
-#     ).values(
-#         'semaine',  # Inclure la semaine dans le regroupement
-#         'entrer__souscategorie__libelle'
-#     ).annotate(nombre_sorties=Count('id')).order_by('semaine')
-#
-#     # Organiser les données par semaine
-#     resultats_par_semaine = {}
-#     for sortie in sorties_par_semaine:
-#         semaine = f"Week {sortie['semaine']}"
-#         if semaine not in resultats_par_semaine:
-#             resultats_par_semaine[semaine] = []
-#         resultats_par_semaine[semaine].append({
-#             "month": sortie['entrer__souscategorie__libelle'],
-#             "count": sortie['nombre_sorties']
-#         })
-#
-#     # Construire la réponse JSON
-#     data = {
-#         "annee": debut_annee.year,
-#         "sorties_par_semaine": list(resultats_par_semaine)
-#     }
-#     response_data = {
-#         "etat": True,
-#         "message": "Eta de vente des produits récupérés avec succès",
-#         "donnee": data
-#     }
-#     return JsonResponse(response_data, safe=False)
-
-
-@csrf_exempt
-# @token_required
-def add_client(request):
-    response_data = {'message': "Requête invalide", 'etat': False}
-
-    if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+    def post(self, request, *args, **kwargs):
+        data = request.data
 
         # Champs obligatoires
-        nom = form.get("nom")
-        role = form.get("role")
-        entreprise_id = form.get("entreprise_id")
+        nom = data.get("nom")
+        role = data.get("role")
+        entreprise_id = data.get("entreprise_id")
+        user_id = data.get("user_id")
 
-        # Validation des champs obligatoires
         if not all([nom, role, entreprise_id]):
-            response_data["message"] = "Les champs 'nom', 'role' et 'entreprise' sont obligatoires."
-            return JsonResponse(response_data)
+            return Response(
+                {"etat": False, "message": "Les champs 'nom', 'role' et 'entreprise_id' sont obligatoires."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Champs optionnels
-        adresse = form.get("adresse")
-        numero = form.get("numero")
-        email = form.get("email")
-        coordonne = form.get("coordonne")
-        user_id = form.get("user_id")
-
-        # Vérification de l'utilisateur
-        user = Utilisateur.objects.filter(uuid=user_id).first()
+        # Vérification utilisateur
+        user = request.user
         if not user:
-            response_data["message"] = "Utilisateur non trouvé."
-            return JsonResponse(response_data)
+            return Response({"etat": False, "message": "Utilisateur non trouvé."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Vérification des permissions de l'utilisateur
         if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
-            response_data["message"] = "Vous n'avez pas la permission d'ajouter un client."
-            return JsonResponse(response_data)
+            return Response({"etat": False, "message": "Vous n'avez pas la permission d'ajouter un client."},
+                            status=status.HTTP_403_FORBIDDEN)
 
-        # Vérification de l'entreprise
+        # Vérification entreprise
         entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
         if not entreprise:
-            response_data["message"] = "Entreprise non trouvée."
-            return JsonResponse(response_data)
+            return Response({"etat": False, "message": "Entreprise non trouvée."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Création du client
-        client = Client.objects.create(
-            nom=nom,
-            adresse=adresse,
-            numero=numero,
-            email=email,
-            coordonne=coordonne,
-            role=role,
-            entreprise=entreprise,
-        )
+        # Sérialisation et création
 
-        response_data["etat"] = True
-        response_data["id"] = client.uuid
-        response_data["message"] = "Client ajouté avec succès."
+        serializer = ClientSerializer(data=data)
+        if serializer.is_valid():
+            client = serializer.save(entreprise=entreprise)
+            return Response(
+                {"etat": True, "id": client.uuid, "message": "Client ajouté avec succès."},
+                status=status.HTTP_201_CREATED,
+            )
 
-    return JsonResponse(response_data)
+        return Response({"etat": False, "message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
-@token_required
-def get_client_un(request, uuid):
-    response_data = {'message': "requette invalide", 'etat': False}
-    client = Client.objects.all().filter(uuid=uuid).first()
+class ClientGetAPIView(APIView):
+    def get(self, request, uuid):
+        response_data = {'message': "requette invalide", 'etat': False}
+        client = Client.objects.all().filter(uuid=uuid).first()
 
-    if client:
-        client_data = {
-            "uuid": client.uuid,
-            "nom": client.nom,
-            "adresse": client.adresse,
-            "email": client.email,
-            "coordonne": client.coordonne,
-            "role": client.role,
-            "libelle": client.libelle,
-            "numero": client.numero,
-        }
+        if client:
+            client_data = {
+                "uuid": client.uuid,
+                "nom": client.nom,
+                "adresse": client.adresse,
+                "email": client.email,
+                "coordonne": client.coordonne,
+                "role": client.role,
+                "libelle": client.libelle,
+                "numero": client.numero,
+            }
 
-        response_data["etat"] = True
-        response_data["donnee"] = client_data
-        response_data["message"] = "success"
-    else:
-        response_data["message"] = "client non trouver"
+            response_data["etat"] = True
+            response_data["donnee"] = client_data
+            response_data["message"] = "success"
+        else:
+            response_data["message"] = "client non trouver"
 
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_client(request):
     response_data = {'message': "requête invalide", 'etat': False}
 
@@ -1470,8 +1323,8 @@ def set_client(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_client(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -1571,8 +1424,8 @@ def del_client(request):
 #
 #     return JsonResponse(response_data)
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_client_all(request, uuid):
     try:
         # Vérifier si l'entreprise existe
@@ -1620,50 +1473,82 @@ def api_client_all(request, uuid):
 
 # Pour les Categorie
 
-@csrf_exempt
-@token_required
-def add_categorie(request):
-    response_data = {'message': "requête invalide", 'etat': False}
+# @csrf_exempt
+# @token_required
+# def add_categorie(request):
+#     response_data = {'message': "requête invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         form = request.POST
+#         image = request.FILES.get('image')
+#         # try:
+#         #     form = json.loads(request.body.decode("utf-8"))
+#         # except json.JSONDecodeError:
+#         #     return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+#
+#         libelle = form.get("libelle")
+#         user_id = form.get("user_id")
+#         entreprise_id = form.get("entreprise_id")
+#         user = Utilisateur.objects.filter(uuid=user_id).first()
+#
+#         if user:
+#             # Vérification des permissions de l'utilisateur
+#             # if user.has_perm('entreprise.add_categorie'):
+#             if (user.groups.filter(name="Admin").exists()
+#                     or user.groups.filter(name="Editor").exists()
+#             ):
+#                 bout = Entreprise.objects.filter(uuid=entreprise_id).first()
+#                 new_categorie = Categorie(libelle=libelle, entreprise=bout, image=image)
+#                 new_categorie.save()
+#
+#                 response_data["etat"] = True
+#                 response_data["id"] = new_categorie.id
+#                 response_data["slug"] = new_categorie.slug
+#                 response_data["message"] = "success"
+#             else:
+#                 # L'utilisateur n'a pas la permission d'ajouter une catégorie
+#                 response_data["message"] = "Vous n'avez pas la permission d'ajouter une catégorie."
+#         else:
+#             response_data["message"] = "Utilisateur non trouvé."
+#
+#         # Autres cas d'erreurs...
+#     return JsonResponse(response_data)
 
-    if request.method == "POST":
-        form = request.POST
-        image = request.FILES.get('image')
-        # try:
-        #     form = json.loads(request.body.decode("utf-8"))
-        # except json.JSONDecodeError:
-        #     return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+class AddCategorieView(APIView):
 
-        libelle = form.get("libelle")
-        user_id = form.get("user_id")
-        entreprise_id = form.get("entreprise_id")
-        user = Utilisateur.objects.filter(uuid=user_id).first()
+    def post(self, request, *args, **kwargs):
+        libelle = request.data.get("libelle")
+        user_id = request.data.get("user_id")
+        entreprise_id = request.data.get("entreprise_id")
+        image = request.FILES.get("image")
 
-        if user:
-            # Vérification des permissions de l'utilisateur
-            # if user.has_perm('entreprise.add_categorie'):
-            if (user.groups.filter(name="Admin").exists()
-                    or user.groups.filter(name="Editor").exists()
-            ):
-                bout = Entreprise.objects.filter(uuid=entreprise_id).first()
-                new_categorie = Categorie(libelle=libelle, entreprise=bout, image=image)
-                new_categorie.save()
+        # Vérification utilisateur
+        user = request.user
+        if not user:
+            return Response({"etat": False, "message": "Utilisateur non trouvé."}, status=status.HTTP_404_NOT_FOUND)
 
-                response_data["etat"] = True
-                response_data["id"] = new_categorie.id
-                response_data["slug"] = new_categorie.slug
-                response_data["message"] = "success"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission d'ajouter une catégorie."
-        else:
-            response_data["message"] = "Utilisateur non trouvé."
+        # Vérification permissions
+        if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
+            return Response({"etat": False, "message": "Vous n'avez pas la permission d'ajouter une catégorie."},
+                            status=status.HTTP_403_FORBIDDEN)
 
-        # Autres cas d'erreurs...
-    return JsonResponse(response_data)
+        # Vérification entreprise
+        entreprise = get_object_or_404(Entreprise, uuid=entreprise_id)
 
+        # Création de la catégorie
+        new_categorie = Categorie(libelle=libelle, entreprise=entreprise, image=image)
+        new_categorie.save()
 
-@csrf_exempt
-@token_required
+        serializer = CategorieSerializer(new_categorie)
+
+        return Response({
+            "etat": True,
+            "message": "success",
+            "donnee": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -1725,8 +1610,8 @@ def get_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -1779,8 +1664,8 @@ def set_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -1825,33 +1710,33 @@ def del_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_categorie_un(request, slug):
-    try:
+class CategorieDetailView(APIView):
 
-        categorie = Categorie.objects.all().filter(slug=slug).first()
+    def get(self, request, uuid):
+        try:
 
-        categorie_data = {
-            "id": categorie.id,
-            "libelle": categorie.libelle,
-            "image": categorie.image.url if categorie.image else None,
-            "slug": categorie.slug,
-            "uuid": categorie.uuid,
-        }
+            categorie = Categorie.objects.all().filter(uuid=uuid).first()
 
-        response_data = {
-            "etat": True,
-            "message": "Catégorie récupérées avec succès",
-            "donnee": categorie_data
-        }
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Categorie non trouvé"
-        }
+            categorie_data = {
+                "id": categorie.id,
+                "libelle": categorie.libelle,
+                "image": categorie.image.url if categorie.image else None,
+                "slug": categorie.slug,
+                "uuid": categorie.uuid,
+            }
 
-    return JsonResponse(response_data)
+            response_data = {
+                "etat": True,
+                "message": "Catégorie récupérées avec succès",
+                "donnee": categorie_data
+            }
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Categorie non trouvé"
+            }
+
+        return JsonResponse(response_data)
 
 
 # @csrf_exempt
@@ -1891,167 +1776,155 @@ def get_categorie_un(request, slug):
 #         }
 #
 #     return JsonResponse(response_data)
-@csrf_exempt
-@token_required
-def get_categories_utilisateur(request, uuid, entreprise_uuid):
-    """
-    Récupère toutes les catégories liées à une entreprise spécifique d'un utilisateur donné.
-    """
-    # if request.method != "POST":
-    #     return JsonResponse({
-    #         "etat": False,
-    #         "message": "Méthode non autorisée. Utilisez POST."
-    #     }, status=405)
+class CategoriesUserAPIView(APIView):
 
-    try:
-        # Récupérer l'utilisateur via l'UUID
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
+    def get(self, request, entreprise_uuid):
+        """
+        Récupère toutes les catégories liées à une entreprise spécifique d'un utilisateur donné.
+        """
 
-        # Vérifier que l'entreprise avec l'UUID donné appartient à l'utilisateur
-        entreprise = utilisateur.entreprises.filter(uuid=entreprise_uuid).first()
+        try:
+            # Récupérer l'utilisateur via l'UUID
+            utilisateur = request.user
 
-        if not entreprise:
+            # Vérifier que l'entreprise avec l'UUID donné appartient à l'utilisateur
+            entreprise = utilisateur.entreprises.filter(uuid=entreprise_uuid).first()
+
+            if not entreprise:
+                return JsonResponse({
+                    "etat": False,
+                    "message": "Entreprise non trouvée ou non associée à cet utilisateur."
+                })
+
+            # Récupérer les catégories associées à cette entreprise
+            categories = Categorie.objects.filter(entreprise=entreprise)
+
+            if not categories.exists():
+                return JsonResponse({
+                    "etat": False,
+                    "message": "Aucune catégorie trouvée pour cette entreprise."
+                })
+
+            # Préparer les données pour la réponse
+            categories_data = [
+                {
+                    "libelle": categorie.libelle,
+                    "slug": categorie.slug,
+                    "uuid": categorie.uuid,
+                    "sous_categorie_count": categorie.sous_categorie.count(),
+                    "image": categorie.image.url if categorie.image else None,
+                    # "entreprise": entreprise.nom, # Optionnel si vous voulez inclure le nom de l'entreprise
+                }
+                for categorie in categories
+            ]
+
             return JsonResponse({
-                "etat": False,
-                "message": "Entreprise non trouvée ou non associée à cet utilisateur."
+                "etat": True,
+                "message": "Catégories récupérées avec succès.",
+                "donnee": categories_data
             })
 
-        # Récupérer les catégories associées à cette entreprise
-        categories = Categorie.objects.filter(entreprise=entreprise)
-
-        if not categories.exists():
+        except Utilisateur.DoesNotExist:
             return JsonResponse({
                 "etat": False,
-                "message": "Aucune catégorie trouvée pour cette entreprise."
+                "message": "Utilisateur non trouvé."
             })
-
-        # Préparer les données pour la réponse
-        categories_data = [
-            {
-                "libelle": categorie.libelle,
-                "slug": categorie.slug,
-                "uuid": categorie.uuid,
-                "sous_categorie_count": categorie.sous_categorie.count(),
-                "image": categorie.image.url if categorie.image else None,
-                # "entreprise": entreprise.nom, # Optionnel si vous voulez inclure le nom de l'entreprise
-            }
-            for categorie in categories
-        ]
-
-        return JsonResponse({
-            "etat": True,
-            "message": "Catégories récupérées avec succès.",
-            "donnee": categories_data
-        })
-
-    except Utilisateur.DoesNotExist:
-        return JsonResponse({
-            "etat": False,
-            "message": "Utilisateur non trouvé."
-        })
-    except Exception as e:
-        return JsonResponse({
-            "etat": False,
-            "message": f"Erreur serveur : {str(e)}"
-        }, status=500)
+        except Exception as e:
+            return JsonResponse({
+                "etat": False,
+                "message": f"Erreur serveur : {str(e)}"
+            }, status=500)
 
 
-# Sous_Categorie
+class AddSousCategorieAPIView(APIView):
 
-@csrf_exempt
-@token_required
-def add_sous_categorie(request):
-    response_data = {'message': "requette invalide", 'etat': False}
+    def post(self, request, *args, **kwargs):
+        response_data = {'etat': False, 'message': "Requête invalide"}
 
-    if request.method == "POST":
-        form = request.POST
-        image = request.FILES.get('image')
-        print(form)
-        # form = dict()
-        # try:
-        #     form = json.loads(request.body.decode("utf-8"))
-        # except:
-        #     return JsonResponse({'message': "Erreur lors de le lecture des donnees JSON", 'etat': False})
+        libelle = request.data.get("libelle")
+        categorie_slug = request.data.get("categorie_slug")
+        user_id = request.data.get("user_id")
+        image = request.FILES.get("image")
 
-        libelle = form.get("libelle")
-        categorie_slug = form.get("categorie_slug")
-        user_id = form.get("user_id")
-        user = Utilisateur.objects.all().filter(uuid=user_id).first()
-        if user:
-            # if user.has_perm('entreprise.add_souscategorie'):
-            if (user.groups.filter(name="Admin").exists()
-                    or user.groups.filter(name="Editor").exists()
-            ):
-
-                categorie_from_database = Categorie.objects.all().filter(uuid=categorie_slug).first()
-                if not categorie_from_database:
-                    response_data["message"] = "categorie non trouvé"
-                else:
-
-                    new_sous_categorie = SousCategorie(libelle=libelle, categorie=categorie_from_database, image=image)
-                    new_sous_categorie.save()
-
-                    response_data["etat"] = True
-                    response_data["id"] = new_sous_categorie.id
-                    response_data["slug"] = new_sous_categorie.slug
-                    response_data["message"] = "success"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission d'ajouter une souscatégorie."
-        else:
+        # Vérification utilisateur
+        user = request.user
+        if not user:
             response_data["message"] = "Utilisateur non trouvé."
+            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
 
-        # requette invalide
+        # Vérification des permissions
+        if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
+            response_data["message"] = "Vous n'avez pas la permission d'ajouter une sous-catégorie."
+            return Response(response_data, status=status.HTTP_403_FORBIDDEN)
 
-    return JsonResponse(response_data)
+        # Vérification de la catégorie
+        categorie = Categorie.objects.filter(uuid=categorie_slug).first()
+        if not categorie:
+            response_data["message"] = "Catégorie non trouvée."
+            return Response(response_data, status=status.HTTP_404_NOT_FOUND)
 
+        # Création de la sous-catégorie
+        sous_categorie = SousCategorie.objects.create(
+            libelle=libelle,
+            categorie=categorie,
+            image=image
+        )
 
-@csrf_exempt
-@token_required
-def get_sous_categories_utilisateur(request, uuid, entreprise_id):
-    try:
-        # Récupérer l'utilisateur avec l'ID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
-
-        # Récupérer toutes les entreprises associées à cet utilisateur
-        entreprise = Entreprise.objects.get(uuid=entreprise_id)
-
-        # Récupérer toutes les catégories associées à ces entreprises
-        categories = Categorie.objects.filter(entreprise=entreprise)
-
-        # Récupérer toutes les sous-catégories associées à ces catégories
-        sous_categories = SousCategorie.objects.filter(categorie__in=categories)
-
-        # Préparer les données de la réponse
-        sous_categories_data = [
-            {
-                "id": sous_categorie.id,
-                "libelle": sous_categorie.libelle,
-                "image": sous_categorie.image.url if sous_categorie.image else None,
-                "uuid": sous_categorie.uuid,
-                "slug": sous_categorie.slug,
-                # "categorie": sous_categorie.categorie.nom,
-                # "entreprise": sous_categorie.categorie.entreprise.nom
-            }
-            for sous_categorie in sous_categories
-        ]
-
-        response_data = {
+        response_data.update({
             "etat": True,
-            "message": "Sous-catégories récupérées avec succès",
-            "donnee": sous_categories_data
-        }
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
+            "id": sous_categorie.id,
+            "slug": sous_categorie.slug,
+            "message": "Sous-catégorie ajoutée avec succès."
+        })
 
-    return JsonResponse(response_data)
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+class SousCategoriesUtilisateurAPIView(APIView):
+
+    def get(self, request, entreprise_id):
+        try:
+            # Récupérer l'utilisateur avec l'ID donné
+            utilisateur = request.user
+
+            # Récupérer toutes les entreprises associées à cet utilisateur
+            entreprise = Entreprise.objects.get(uuid=entreprise_id)
+
+            # Récupérer toutes les catégories associées à ces entreprises
+            categories = Categorie.objects.filter(entreprise=entreprise)
+
+            # Récupérer toutes les sous-catégories associées à ces catégories
+            sous_categories = SousCategorie.objects.filter(categorie__in=categories)
+
+            # Préparer les données de la réponse
+            sous_categories_data = [
+                {
+                    "id": sous_categorie.id,
+                    "libelle": sous_categorie.libelle,
+                    "image": sous_categorie.image.url if sous_categorie.image else None,
+                    "uuid": sous_categorie.uuid,
+                    "slug": sous_categorie.slug,
+                    # "categorie": sous_categorie.categorie.nom,
+                    # "entreprise": sous_categorie.categorie.entreprise.nom
+                }
+                for sous_categorie in sous_categories
+            ]
+
+            response_data = {
+                "etat": True,
+                "message": "Sous-catégories récupérées avec succès",
+                "donnee": sous_categories_data
+            }
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
+
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_sous_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -2125,8 +1998,8 @@ def get_sous_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_sous_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -2187,8 +2060,8 @@ def set_sous_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_sous_categorie(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -2234,121 +2107,168 @@ def del_sous_categorie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_sous_categorie_un(request, uuid):
-    response_data = {'message': "requette invalide", 'etat': False}
+class SousCategorieUnEntrepriseView(APIView):
+    def get(self, request, uuid):
+        response_data = {'message': "requette invalide", 'etat': False}
 
-    sous_categorie = SousCategorie.objects.all().filter(uuid=uuid).first()
+        sous_categorie = SousCategorie.objects.all().filter(uuid=uuid).first()
 
-    if sous_categorie:
-        sous_categorie_data = {
-            "id": sous_categorie.id,
-            "uuid": sous_categorie.uuid,
-            "libelle": sous_categorie.libelle,
-            "slug": sous_categorie.slug,
-            "categorie_slug": sous_categorie.categorie.slug,
-            "image": sous_categorie.image.url if sous_categorie.image else None,
+        if sous_categorie:
+            sous_categorie_data = {
+                "id": sous_categorie.id,
+                "uuid": sous_categorie.uuid,
+                "libelle": sous_categorie.libelle,
+                "slug": sous_categorie.slug,
+                "categorie_slug": sous_categorie.categorie.slug,
+                "image": sous_categorie.image.url if sous_categorie.image else None,
+            }
 
-        }
+            response_data["etat"] = True
+            response_data["message"] = "success"
+            response_data["donnee"] = sous_categorie_data
+        else:
+            response_data["message"] = "sous categorie non trouver"
 
-        response_data["etat"] = True
-        response_data["message"] = "success"
-        response_data["donnee"] = sous_categorie_data
-    else:
-        response_data["message"] = "sous categorie non trouver"
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_sous_categories_par_categorie(request, uuid):
-    try:
-        # Récupérer la catégorie par son ID
-        categorie = Categorie.objects.get(uuid=uuid)
+class SousCategoriesEntrepriseView(APIView):
 
-        # Récupérer toutes les sous-catégories liées à cette catégorie
-        sous_categories = SousCategorie.objects.filter(categorie=categorie)
+    def get(self, request, uuid):
+        try:
+            # Récupérer la catégorie par son ID
+            categorie = Categorie.objects.get(uuid=uuid)
 
-        # Construire la réponse avec les sous-catégories
-        response_data = {
-            "etat": True,
-            "message": "Sous-catégories récupérées avec succès",
-            "donnee": [
-                {
-                    "id": sous_categorie.id,
-                    "libelle": sous_categorie.libelle,
-                    "image": sous_categorie.image.url if sous_categorie.image else None,
-                    "uuid": sous_categorie.uuid,
-                } for sous_categorie in sous_categories
-            ]
-        }
+            # Récupérer toutes les sous-catégories liées à cette catégorie
+            sous_categories = SousCategorie.objects.filter(categorie=categorie)
 
-    except Categorie.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Catégorie non trouvée"
-        }
+            # Construire la réponse avec les sous-catégories
+            response_data = {
+                "etat": True,
+                "message": "Sous-catégories récupérées avec succès",
+                "donnee": [
+                    {
+                        "id": sous_categorie.id,
+                        "libelle": sous_categorie.libelle,
+                        "image": sous_categorie.image.url if sous_categorie.image else None,
+                        "uuid": sous_categorie.uuid,
+                    } for sous_categorie in sous_categories
+                ]
+            }
 
-    return JsonResponse(response_data)
+        except Categorie.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Catégorie non trouvée"
+            }
+
+        return JsonResponse(response_data)
 
 
 # Depense
 
-@csrf_exempt
-@token_required
-def add_depense(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+# @csrf_exempt
+# @token_required
+# def add_depense(request):
+#     response_data = {'message': "Requete invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         form = request.POST
+#         facture = request.FILES.get('facture')
+#
+#         libelle = form.get("libelle")
+#         entreprise_id = form.get("entreprise_id")
+#         somme = form.get("somme")
+#         date = form.get("date")
+#         admin_id = form.get("user_id")
+#         print(form)
+#
+#         if admin_id:
+#
+#             admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+#
+#             if admin:
+#                 # if admin.has_perm('entreprise.add_depense'):
+#                 if (admin.groups.filter(name="Admin").exists()
+#                         or admin.groups.filter(name="Editor").exists()
+#                 ):
+#                     entreprise = Entreprise.objects.all().filter(uuid=entreprise_id).first()
+#
+#                     if entreprise:
+#
+#                         new_livre = Depense(somme=somme, date=date, libelle=libelle, facture=facture,
+#                                             entreprise=entreprise)
+#                         new_livre.save()
+#
+#                         response_data["etat"] = True
+#                         response_data["id"] = new_livre.id
+#                         response_data["slug"] = new_livre.slug
+#                         response_data["message"] = "success"
+#                     else:
+#                         return JsonResponse({'message': "entreprise non trouvee", 'etat': False})
+#                 else:
+#                     # L'utilisateur n'a pas la permission d'ajouter une catégorie
+#                     response_data["message"] = "Vous n'avez pas la permission d'ajouter un depense."
+#             else:
+#                 return JsonResponse({'message': "Admin non trouvee", 'etat': False})
+#
+#         else:
+#             response_data["message"] = "ID de l'utilisateur manquant !"
+#
+#     return JsonResponse(response_data)
 
-    if request.method == "POST":
-        form = request.POST
-        facture = request.FILES.get('facture')
+class DepenseCreateView(APIView):
 
-        libelle = form.get("libelle")
-        entreprise_id = form.get("entreprise_id")
-        somme = form.get("somme")
-        date = form.get("date")
-        admin_id = form.get("user_id")
-        print(form)
+    def post(self, request, format=None):
+        data = request.data
+        libelle = data.get("libelle")
+        entreprise_id = data.get("entreprise_id")
+        somme = data.get("somme")
+        date = data.get("date")
+        facture = request.FILES.get("facture")
+        admin_id = data.get("user_id")
 
-        if admin_id:
+        if not admin_id:
+            return Response({"message": "ID de l'utilisateur manquant !", "etat": False},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-            admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        if not admin:
+            return Response({"message": "Admin non trouvé", "etat": False},
+                            status=status.HTTP_404_NOT_FOUND)
 
-            if admin:
-                # if admin.has_perm('entreprise.add_depense'):
-                if (admin.groups.filter(name="Admin").exists()
-                        or admin.groups.filter(name="Editor").exists()
-                ):
-                    entreprise = Entreprise.objects.all().filter(uuid=entreprise_id).first()
+        # Vérifier les permissions par groupes
+        if not (admin.groups.filter(name="Admin").exists() or admin.groups.filter(name="Editor").exists()):
+            return Response({"message": "Vous n'avez pas la permission d'ajouter une dépense.", "etat": False},
+                            status=status.HTTP_403_FORBIDDEN)
 
-                    if entreprise:
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
+        if not entreprise:
+            return Response({"message": "Entreprise non trouvée", "etat": False},
+                            status=status.HTTP_404_NOT_FOUND)
 
-                        new_livre = Depense(somme=somme, date=date, libelle=libelle, facture=facture,
-                                            entreprise=entreprise)
-                        new_livre.save()
+        # Créer la dépense
+        depense = Depense(
+            somme=somme,
+            date=date,
+            libelle=libelle,
+            facture=facture,
+            entreprise=entreprise
+        )
+        depense.save()
 
-                        response_data["etat"] = True
-                        response_data["id"] = new_livre.id
-                        response_data["slug"] = new_livre.slug
-                        response_data["message"] = "success"
-                    else:
-                        return JsonResponse({'message': "entreprise non trouvee", 'etat': False})
-                else:
-                    # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                    response_data["message"] = "Vous n'avez pas la permission d'ajouter un depense."
-            else:
-                return JsonResponse({'message': "Admin non trouvee", 'etat': False})
+        serializer = DepenseSerializer(depense)
 
-        else:
-            response_data["message"] = "ID de l'utilisateur manquant !"
+        return Response({
+            "etat": True,
+            "id": depense.id,
+            "slug": depense.slug,
+            "message": "success",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
 
-    return JsonResponse(response_data)
-
-
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_depense(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -2412,8 +2332,8 @@ def set_depense(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_depense(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -2522,70 +2442,54 @@ def get_depense_un(request, uuid):
 #
 #     return JsonResponse(response_data)
 
-@csrf_exempt
-@token_required
-def get_depenses_entreprise(request, uuid, entreprise_id):
-    try:
-        # Récupérer l'utilisateur avec l'UUID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
+class DepensesEntrepriseAPIView(APIView):
 
-        # Charger les données du corps de la requête
-        # try:
-        #     form = json.loads(request.body.decode("utf-8"))
-        # except json.JSONDecodeError:
-        #     return JsonResponse({
-        #         "etat": False,
-        #         "message": "Données de requête non valides"
-        #     })
+    def get(self, request, entreprise_id):
+        try:
+            # Récupérer l'utilisateur avec l'UUID donné
+            utilisateur = request.user
 
-        # Récupérer l'UUID de l'entreprise depuis les données de la requête
-        # entreprise_uuid = form.get("entreprise_uuid")
-        # if not entreprise_uuid:
-        #     return JsonResponse({
-        #         "etat": False,
-        #         "message": "L'UUID de l'entreprise est requis"
-        #     })
+            # Vérifier si l'entreprise existe et si elle est associée à l'utilisateur
+            entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
 
-        # Vérifier si l'entreprise existe et si elle est associée à l'utilisateur
-        entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
-        if not entreprise:
-            return JsonResponse({
-                "etat": False,
-                "message": "Entreprise non trouvée ou non associée à l'utilisateur"
-            })
+            if not entreprise:
+                return JsonResponse({
+                    "etat": False,
+                    "message": "Entreprise non trouvée ou non associée à l'utilisateur"
+                })
 
-        # Récupérer toutes les dépenses liées à l'entreprise
-        depenses = Depense.objects.filter(entreprise=entreprise)
+            # Récupérer toutes les dépenses liées à l'entreprise
+            depenses = Depense.objects.filter(entreprise=entreprise)
 
-        # Préparer les données des dépenses pour la réponse
-        depenses_data = [
-            {
-                "id": dep.id,
-                "uuid": dep.uuid,
-                "slug": dep.slug,
-                "libelle": dep.libelle,
-                "somme": dep.somme,
-                "date": dep.date.strftime("%Y-%m-%d"),
+            # Préparer les données des dépenses pour la réponse
+            depenses_data = [
+                {
+                    "id": dep.id,
+                    "uuid": dep.uuid,
+                    "slug": dep.slug,
+                    "libelle": dep.libelle,
+                    "somme": dep.somme,
+                    "date": dep.date.strftime("%Y-%m-%d"),
+                }
+                for dep in depenses
+            ]
+
+            response_data = {
+                "etat": True,
+                "message": "Dépenses récupérées avec succès",
+                "donnee": depenses_data
             }
-            for dep in depenses
-        ]
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
 
-        response_data = {
-            "etat": True,
-            "message": "Dépenses récupérées avec succès",
-            "donnee": depenses_data
-        }
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_depenses_somme(request, uuid, entreprise_id):
     try:
         utilisateur = Utilisateur.objects.get(uuid=uuid)
@@ -2633,93 +2537,75 @@ def get_depenses_somme(request, uuid, entreprise_id):
 
 # Entrer
 
-@csrf_exempt
-@token_required
-def add_entre(request):
-    response_data = {'message': "Requête invalide", 'etat': False}
+class AddEntrerView(APIView):
 
-    if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+    def post(self, request):
+        data = request.data
 
-        qte = form.get("qte")
-        pu = form.get("pu")
-        pu_achat = form.get("pu_achat")
-        libelle = form.get("libelle")
-        date = form.get("date")
-        admin_id = form.get("user_id")
-        cumuler_quantite = form.get("cumuler_quantite")
-        is_sortie = form.get("is_sortie")
-        is_prix = form.get("is_prix")
-        categorie_slug = form.get("categorie_slug")
-        client_id = form.get("client_id")
-        user = request.user
+        qte = data.get("qte")
+        pu = data.get("pu")
+        pu_achat = data.get("pu_achat")
+        libelle = data.get("libelle")
+        date = data.get("date")
 
-        if admin_id:
-            admin = Utilisateur.objects.filter(uuid=admin_id).first()
-            if admin:
-                if admin.groups.filter(name="Admin").exists() or admin.groups.filter(name="Editor").exists():
-                    categorie = SousCategorie.objects.filter(uuid=categorie_slug).first()
+        cumuler_quantite = data.get("cumuler_quantite")
+        is_sortie = data.get("is_sortie")
+        is_prix = data.get("is_prix")
 
-                    if categorie:
-                        # Création d'un nouvel objet Entrer sans client
-                        new_livre = Entrer(
-                            qte=qte,
-                            pu=pu,
-                            pu_achat=pu_achat,
-                            libelle=libelle,
-                            date=date,
-                            cumuler_quantite=cumuler_quantite,
-                            is_sortie=is_sortie,
-                            is_prix=is_prix,
-                            souscategorie=categorie
-                        )
+        client_id = data.get("client_id")
+        categorie_slug = data.get("categorie_slug")
+        user_id = data.get("user_id")
 
-                        # Ajout du client si client_id est fourni et valide
-                        # if client_id:
-                        #     client = Client.objects.filter(uuid=client_id).first()
-                        #     if client:
-                        #         new_livre.client = client
-                        #     else:
-                        #         return JsonResponse({'message': "Client non trouvé", 'etat': False})
-                        if client_id:
-                            try:
-                                client_uuid = uuid.UUID(client_id)  # Vérifier si client_id est un UUID valide
-                            except ValueError:
-                                return JsonResponse({'message': "Client non trouvé", 'etat': False})  # UUID invalide
+        # Vérification utilisateur
+        admin = Utilisateur.objects.filter(uuid=user_id).first()
+        if not admin:
+            return Response({"etat": False, "message": "Utilisateur introuvable"}, status=status.HTTP_400_BAD_REQUEST)
 
-                            client = Client.objects.filter(uuid=client_uuid).first()
-                            if client:
-                                new_livre.client = client
-                            else:
-                                return JsonResponse({'message': "Client non trouvé", 'etat': False})
+        if not (admin.groups.filter(name="Admin").exists() or admin.groups.filter(name="Editor").exists()):
+            return Response({"etat": False, "message": "Permission refusée"}, status=status.HTTP_403_FORBIDDEN)
 
-                        # Enregistrement de l'objet Entrer
-                        new_livre.save(user=user)
+        # Vérification catégorie
+        categorie = SousCategorie.objects.filter(uuid=categorie_slug).first()
+        if not categorie:
+            return Response({"etat": False, "message": "Nom de produit non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
 
-                        response_data.update({
-                            "etat": True,
-                            "id": new_livre.id,
-                            "slug": new_livre.slug,
-                            "message": "success"
-                        })
-                    else:
-                        return JsonResponse({'message': "Nom de produit non trouvée", 'etat': False})
-                else:
-                    response_data[
-                        "message"] = "Vous n'avez pas la permission d'ajouter une entrée."
-            else:
-                response_data["message"] = "admin introuvable."
+        # Création de l'objet
+        entrer = Entrer(
+            qte=qte,
+            pu=pu,
+            pu_achat=pu_achat,
+            libelle=libelle,
+            date=date,
+            cumuler_quantite=cumuler_quantite,
+            is_sortie=is_sortie,
+            is_prix=is_prix,
+            souscategorie=categorie
+        )
+
+        # Vérification client
+        if client_id:
+            client = Client.objects.filter(uuid=client_id).first()
+            if not client:
+                return Response({"etat": False, "message": "Client non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
+            entrer.client = client
+
+        # Sauvegarde avec l’utilisateur (si ton modèle supporte save(user=...))
+        user = request.user if request.user.is_authenticated else None
+        if user:
+            entrer.save(user=user)
         else:
-            response_data["message"] = "Utilisateur non trouvé."
+            entrer.save()
 
-    return JsonResponse(response_data)
+        return Response({
+            "etat": True,
+            "id": entrer.id,
+            "slug": entrer.slug,
+            "message": "success"
+        }, status=status.HTTP_201_CREATED)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_entre(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -2787,8 +2673,8 @@ def del_entre(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_entre(request):
     response_data = {'message': "Requête invalide", 'etat': False, 'donnee': []}
 
@@ -2866,8 +2752,8 @@ def get_entre(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_entre(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -3092,8 +2978,8 @@ def get_entre_un(request, uuid):
 #         }
 #
 #     return JsonResponse(response_data)
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_entrers_entreprise(request, uuid, entreprise_id):
     try:
         # Vérifier si l'entreprise existe
@@ -3215,82 +3101,55 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
 #             response_data["message"] = "Nom de livre ou image ou description manquant"
 #
 #     return JsonResponse(response_data)
-@csrf_exempt
-@token_required
-def add_sortie(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+class SortieCreateView(APIView):
+    def post(self, request):
+        data = request.data
 
-    if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except:
-            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
+        qte = data.get("qte")
+        pu = data.get("pu")
+        admin_id = data.get("user_id")
+        entrer_id = data.get("entre_id")
+        client_id = data.get("client_id")
 
-        qte = form.get("qte")
-        pu = form.get("pu")
-        admin_id = form.get("user_id")
-        entrer_id = form.get("entre_id")
-        client_id = form.get("client_id")
-        user = request.user
+        # Vérif admin
+        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        if not admin:
+            return Response({'etat': False, 'message': "Admin non trouvé"}, status=status.HTTP_404_NOT_FOUND)
 
-        if admin_id:
-            admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+        if not (admin.groups.filter(name__in=["Admin", "Editor", "Author"]).exists()):
+            return Response({'etat': False, 'message': "Vous n'avez pas la permission"}, status=status.HTTP_403_FORBIDDEN)
 
-            if admin:
-                if (admin.groups.filter(name="Admin").exists()
-                        or admin.groups.filter(name="Editor").exists()
-                        or admin.groups.filter(name="Author").exists()):
+        # Vérif entrée
+        entrer = Entrer.objects.filter(uuid=entrer_id).first()
+        if not entrer:
+            return Response({'etat': False, 'message': "Entrée non trouvée"}, status=status.HTTP_404_NOT_FOUND)
 
-                    entrer = Entrer.objects.all().filter(uuid=entrer_id).first()
+        # Création sortie
+        sortie = Sortie(qte=qte, pu=pu, entrer=entrer, created_by=admin)
 
-                    if entrer:
-                        new_livre = Sortie(qte=qte, pu=pu, entrer=entrer, created_by=admin)
+        # Vérif client (optionnel)
+        if client_id:
+            try:
+                client_uuid = uuid.UUID(client_id)
+            except ValueError:
+                return Response({'etat': False, 'message': "Client non valide"}, status=status.HTTP_400_BAD_REQUEST)
 
-                        # Ajout du client si client_id est fourni et valide
-                        # if client_id:
-                        #     client = Client.objects.filter(uuid=client_id).first()
-                        #     if client:
-                        #         new_livre.client = client
-                        #     else:
-                        #         return JsonResponse({'message': "Client non trouvé", 'etat': False})
-                        if client_id:
-                            try:
-                                client_uuid = uuid.UUID(client_id)  # Vérifier si client_id est un UUID valide
-                            except ValueError:
-                                return JsonResponse({'message': "Client non trouvé", 'etat': False})  # UUID invalide
+            client = Client.objects.filter(uuid=client_uuid).first()
+            if not client:
+                return Response({'etat': False, 'message': "Client non trouvé"}, status=status.HTTP_404_NOT_FOUND)
+            sortie.client = client
 
-                            client = Client.objects.filter(uuid=client_uuid).first()
-                            if client:
-                                new_livre.client = client
-                            else:
-                                return JsonResponse({'message': "Client non trouvé", 'etat': False})
-                        # Tentative de sauvegarde du livre
-                        try:
-                            new_livre.save(user=user)
-                            response_data["etat"] = True
-                            response_data["id"] = new_livre.id
-                            response_data["slug"] = new_livre.slug
-                            response_data["message"] = "success"
-                        except ValidationError as e:
-                            return JsonResponse({'message': str(e), 'etat': False})
+        sortie.save(user=request.user)
 
-                    else:
-                        return JsonResponse({'message': "Entrée non trouvée", 'etat': False})
+        serializer = SortieSerializer(sortie)
+        return Response({
+            "etat": True,
+            "message": "success",
+            "donnee": serializer.data
+        }, status=status.HTTP_201_CREATED)
 
-                else:
-                    response_data["message"] = "Vous n'avez pas la permission d'ajouter une sortie."
-
-            else:
-                return JsonResponse({'message': "Admin non trouvé", 'etat': False})
-
-        else:
-            response_data["message"] = "Paramètre utilisateur manquant"
-
-    return JsonResponse(response_data)
-
-
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_sortie(request):
     response_data = {'message': "Requete invalide", 'etat': False, 'donnee': []}
 
@@ -3381,8 +3240,8 @@ def get_sortie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def update_sorties(request):
     """
     Met à jour le champ `is_remise` à True pour les sorties sélectionnées.
@@ -3417,8 +3276,8 @@ def update_sorties(request):
 
     return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def update_fac_sorties(request):
     """
     Met à jour le champ `is_remise` à True pour les sorties sélectionnées.
@@ -3454,8 +3313,8 @@ def update_fac_sorties(request):
     return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_sortie(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -3599,8 +3458,8 @@ def get_sortie_un(request, uuid):
 #
 #     return JsonResponse(response_data)
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def get_sorties_entreprise(request, uuid):
     try:
         # Vérifier si l'entreprise existe
@@ -3660,59 +3519,53 @@ def get_sorties_entreprise(request, uuid):
 # Facture Entrer
 
 
-@csrf_exempt
-@token_required
-def add_facture_entre(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+class AddFactureEntreView(APIView):
 
-    if request.method == "POST":
-        form = request.POST
+    def post(self, request, *args, **kwargs):
+        data = request.data
         facture = request.FILES.get('facture')
 
-        libelle = form.get("libelle")
-        ref = form.get("ref")
-        date = form.get("date")
-        admin_id = form.get("user_id")
-        entreprise_id = form.get("entreprise_id")
+        libelle = data.get("libelle")
+        ref = data.get("ref")
+        date = data.get("date")
+        admin_id = data.get("user_id")
+        entreprise_id = data.get("entreprise_id")
 
-        if admin_id:
+        if not admin_id:
+            return Response({"etat": False, "message": "user_id manquant"}, status=status.HTTP_400_BAD_REQUEST)
 
-            admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        if not admin:
+            return Response({"etat": False, "message": "Admin non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if admin:
-                # if admin.has_perm('entreprise.add_entrer'):
-                if (admin.groups.filter(name="Admin").exists()
-                        or admin.groups.filter(name="Editor").exists()
-                ):
-                    entreprise = Entreprise.objects.all().filter(uuid=entreprise_id).first()
+        # Vérification permission
+        if not (admin.groups.filter(name="Admin").exists() or admin.groups.filter(name="Editor").exists()):
+            return Response({"etat": False, "message": "Permission refusée"}, status=status.HTTP_403_FORBIDDEN)
 
-                    if entreprise:
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
+        if not entreprise:
+            return Response({"etat": False, "message": "Entreprise non trouvée"}, status=status.HTTP_400_BAD_REQUEST)
 
-                        new_livre = FactEntre(ref=ref, facture=facture, libelle=libelle, date=date,
-                                              entreprise=entreprise)
-                        new_livre.save()
+        # Création facture
+        new_livre = FactEntre(
+            ref=ref,
+            facture=facture,
+            libelle=libelle,
+            date=date,
+            entreprise=entreprise
+        )
+        new_livre.save()
 
-                        response_data["etat"] = True
-                        response_data["id"] = new_livre.id
-                        response_data["slug"] = new_livre.slug
-                        response_data["message"] = "success"
-                    else:
-                        # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                        response_data["message"] = "Entreprise non trouver."
-                else:
-                    # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                    response_data["message"] = "Vous n'avez pas la permission d'ajouter une souscatégorie."
-            else:
-                return JsonResponse({'message': "Admin non trouvee", 'etat': False})
-
-        else:
-            response_data["message"] = "Nom de livre ou image ou description manquant"
-
-    return JsonResponse(response_data)
+        return Response({
+            "etat": True,
+            "id": new_livre.id,
+            "slug": new_livre.slug,
+            "message": "success"
+        }, status=status.HTTP_201_CREATED)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_facture_entre(request):
     response_data = {'message': "requête invalide", 'etat': False}
 
@@ -3773,8 +3626,8 @@ def set_facture_entre(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_facture_entre(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -3881,125 +3734,92 @@ def get_facture_entre_un(request, uuid):
 #
 #     return JsonResponse(response_data)
 
-@csrf_exempt
-@token_required
-def get_facEntres_utilisateur(request, uuid, entreprise_id):
-    try:
-        # Récupérer l'utilisateur avec l'UUID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
+class FacEntresUserAPIView(APIView):
+    def get(self, request, entreprise_id):
+        try:
+            # Récupérer l'utilisateur avec l'UUID donné
+            utilisateur = request.user
 
-        # Charger les données du corps de la requête
-        # try:
-        #     form = json.loads(request.body.decode("utf-8"))
-        # except json.JSONDecodeError:
-        #     return JsonResponse({
-        #         "etat": False,
-        #         "message": "Données de requête non valides"
-        #     })
+            # Vérifier si l'entreprise existe et si elle est associée à l'utilisateur
+            entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
+            if not entreprise:
+                return JsonResponse({
+                    "etat": False,
+                    "message": "Entreprise non trouvée ou non associée à l'utilisateur"
+                })
 
-        # Récupérer l'UUID de l'entreprise depuis les données de la requête
-        # entreprise_uuid = form.get("entreprise_uuid")
-        # if not entreprise_uuid:
-        #     return JsonResponse({
-        #         "etat": False,
-        #         "message": "L'UUID de l'entreprise est requis"
-        #     })
+            # Récupérer les factures d'entrée liées à l'entreprise
+            factEntres = FactEntre.objects.filter(entreprise=entreprise)
 
-        # Vérifier si l'entreprise existe et si elle est associée à l'utilisateur
-        entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
-        if not entreprise:
-            return JsonResponse({
-                "etat": False,
-                "message": "Entreprise non trouvée ou non associée à l'utilisateur"
-            })
+            # Préparer les données des factures pour la réponse
+            factures_data = [
+                {
+                    "id": fac.id,
+                    "uuid": fac.uuid,
+                    "slug": fac.slug,
+                    "libelle": fac.libelle,
+                    "ref": fac.ref,
+                    "facture": fac.facture.url if fac.facture else None,
+                    "date": fac.date.strftime("%Y-%m-%d"),
+                }
+                for fac in factEntres
+            ]
 
-        # Récupérer les factures d'entrée liées à l'entreprise
-        factEntres = FactEntre.objects.filter(entreprise=entreprise)
-
-        # Préparer les données des factures pour la réponse
-        factures_data = [
-            {
-                "id": fac.id,
-                "uuid": fac.uuid,
-                "slug": fac.slug,
-                "libelle": fac.libelle,
-                "ref": fac.ref,
-                "facture": fac.facture.url if fac.facture else None,
-                "date": fac.date.strftime("%Y-%m-%d"),
+            response_data = {
+                "etat": True,
+                "message": "Factures d'entrée récupérées avec succès",
+                "donnee": factures_data
             }
-            for fac in factEntres
-        ]
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
 
-        response_data = {
-            "etat": True,
-            "message": "Factures d'entrée récupérées avec succès",
-            "donnee": factures_data
-        }
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
 # Facture Sortie
 
-@csrf_exempt
-@token_required
-def add_facture_sortie(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+class AddFactureSortieView(APIView):
 
-    if request.method == "POST":
-        form = request.POST
-        facture = request.FILES.get('facture')
+    def post(self, request):
+        libelle = request.POST.get("libelle")
+        ref = request.POST.get("ref")
+        date = request.POST.get("date")
+        facture = request.FILES.get("facture")
+        admin_id = request.POST.get("user_id")
+        entreprise_id = request.POST.get("entreprise_id")
 
-        libelle = form.get("libelle")
-        ref = form.get("ref")
-        date = form.get("date")
-        admin_id = form.get("user_id")
-        entreprise_id = form.get("entreprise_id")
+        if not admin_id:
+            return Response({"etat": False, "message": "Admin requis"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if admin_id:
+        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        if not admin:
+            return Response({"etat": False, "message": "Admin non trouvé"}, status=status.HTTP_404_NOT_FOUND)
 
-            admin = Utilisateur.objects.all().filter(uuid=admin_id).first()
+        if not (admin.groups.filter(name="Admin").exists() or
+                admin.groups.filter(name="Editor").exists() or
+                admin.groups.filter(name="Author").exists()):
+            return Response({"etat": False, "message": "Permission refusée"}, status=status.HTTP_403_FORBIDDEN)
 
-            if admin:
-                # if admin.has_perm('entreprise.add_entrer'):
-                if (admin.groups.filter(name="Admin").exists()
-                        or admin.groups.filter(name="Editor").exists()
-                        or admin.groups.filter(name="Author").exists()
-                ):
-                    entreprise = Entreprise.objects.all().filter(uuid=entreprise_id).first()
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
+        if not entreprise:
+            return Response({"etat": False, "message": "Entreprise non trouvée"}, status=status.HTTP_404_NOT_FOUND)
 
-                    if entreprise:
+        facture_obj = FactSortie(ref=ref, facture=facture, libelle=libelle, date=date, entreprise=entreprise)
+        facture_obj.save()
 
-                        new_livre = FactSortie(ref=ref, facture=facture, libelle=libelle, date=date,
-                                               entreprise=entreprise)
-                        new_livre.save()
-
-                        response_data["etat"] = True
-                        response_data["id"] = new_livre.id
-                        response_data["slug"] = new_livre.slug
-                        response_data["message"] = "success"
-                    else:
-                        # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                        response_data["message"] = "Entreprise non trouver."
-                else:
-                    # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                    response_data["message"] = "Vous n'avez pas la permission d'ajouter une souscatégorie."
-            else:
-                return JsonResponse({'message': "Admin non trouvee", 'etat': False})
-
-        else:
-            response_data["message"] = "Nom de livre ou image ou description manquant"
-
-    return JsonResponse(response_data)
+        return Response({
+            "etat": True,
+            "message": "success",
+            "id": facture_obj.id,
+            "slug": facture_obj.slug
+        }, status=status.HTTP_201_CREATED)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def set_facture_sortie(request):
     response_data = {'message': "requête invalide", 'etat': False}
 
@@ -4060,8 +3880,8 @@ def set_facture_sortie(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_facture_sortie(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
@@ -4131,133 +3951,206 @@ def get_facture_sortie_un(request, uuid):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_facSorties_utilisateur(request, uuid, entreprise_id):
-    try:
-        # Récupérer l'utilisateur avec l'ID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
+class FacSortiesUserAPIView(APIView):
 
-        # entreprises = utilisateur.entreprises.all()
-        entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
-        if not entreprise:
-            return JsonResponse({
-                "etat": False,
-                "message": "Entreprise non trouvée ou non associée à l'utilisateur"
-            })
+    def get(self, request, entreprise_id):
+        try:
+            # Récupérer l'utilisateur avec l'ID donné
+            utilisateur = request.user
 
-        entrers = FactSortie.objects.filter(entreprise=entreprise)
+            # entreprises = utilisateur.entreprises.all()
+            entreprise = Entreprise.objects.filter(uuid=entreprise_id, utilisateurs=utilisateur).first()
+            if not entreprise:
+                return JsonResponse({
+                    "etat": False,
+                    "message": "Entreprise non trouvée ou non associée à l'utilisateur"
+                })
 
-        # Préparer les données de la réponse
-        categories_data = [
-            {
-                "id": liv.id,
-                "uuid": liv.uuid,
-                # "categorie_libelle": liv.souscategorie.libelle,
-                "slug": liv.slug,
-                "libelle": liv.libelle,
-                "ref": liv.ref,
-                "facture": liv.facture.url if liv.facture else None,
-                "date": liv.date.strftime("%Y-%m-%d"),
+            entrers = FactSortie.objects.filter(entreprise=entreprise)
+
+            # Préparer les données de la réponse
+            categories_data = [
+                {
+                    "id": liv.id,
+                    "uuid": liv.uuid,
+                    # "categorie_libelle": liv.souscategorie.libelle,
+                    "slug": liv.slug,
+                    "libelle": liv.libelle,
+                    "ref": liv.ref,
+                    "facture": liv.facture.url if liv.facture else None,
+                    "date": liv.date.strftime("%Y-%m-%d"),
+                }
+                for liv in entrers
+            ]
+
+            response_data = {
+                "etat": True,
+                "message": "FactEntrer récupérées avec succès",
+                "donnee": categories_data
             }
-            for liv in entrers
-        ]
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
 
-        response_data = {
-            "etat": True,
-            "message": "FactEntrer récupérées avec succès",
-            "donnee": categories_data
-        }
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
 # Autre
 
-@csrf_exempt
-@token_required
-def info_sous_cat(request):
-    response_data = {'message': "requête invalide", 'etat': False}
-    if request.method == "POST":
+class InfoSousCatView(APIView):
+
+    def post(self, request, *args, **kwargs):
+        slug = request.data.get("slug")
+
+        if not slug:
+            return Response(
+                {"etat": False, "message": "slug non fourni"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        entrers = Sortie.objects.filter(entrer__souscategorie__uuid=slug)
+        invents = Entrer.objects.filter(souscategorie__uuid=slug)
+
+        if not entrers.exists():
+            return Response(
+                {"etat": False, "message": "vide"},
+                status=status.HTTP_200_OK
+            )
+
+        # Sorties
+        sortie_data = [
+            {
+                "id": entrer.entrer.id,
+                "libelle": entrer.entrer.libelle,
+                "client": entrer.client.nom if entrer.client else None,
+                "pu": entrer.pu,
+                "qte": entrer.qte,
+                "date": entrer.created_at,
+                "prix_total": entrer.prix_total,
+            }
+            for entrer in entrers
+        ]
+
+        # Inventaires
+        inventaire_data = [
+            {
+                "prix_total": entrer.prix_total,
+                "libelle": entrer.libelle,
+                "pu": entrer.pu,
+                "pu_achat": entrer.pu_achat,
+                "date": entrer.created_at,
+                "client": entrer.client.nom if entrer.client else None,
+                "qte": entrer.qte,
+            }
+            for entrer in invents
+        ]
+
+        sortie_data.append({"sortie": inventaire_data})
+
+        return Response(
+            {"etat": True, "message": "success", "donnee": sortie_data},
+            status=status.HTTP_200_OK
+        )
+
+class UtilisateurEntrepriseHistoriqueView(APIView):
+
+    def get(self, request):
         try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse(response_data)
+            # Récupérer l'utilisateur avec l'ID donné
+            utilisateur = request.user
 
-        slug = form.get("slug")
+            # Récupérer les entreprises associées à cet utilisateur
+            entreprises = utilisateur.entreprises.all()
 
-        if slug:
-            entrers = Sortie.objects.filter(entrer__souscategorie__uuid=slug)
-            invents = Entrer.objects.filter(souscategorie__uuid=slug)
+            # Préparer les données de la réponse
+            entreprises_data = []
+            for entreprise in entreprises:
+                # Récupérer tous les historiques d'entrer de cette entreprise
+                historiques_entrer = HistoriqueEntrer.objects.filter(
+                    entrer__souscategorie__categorie__entreprise=entreprise
+                )
 
-            if entrers.exists():
-                sous_categorie = []
-                for entrer in entrers:
-                    sous_categorie.append({
-                        "id": entrer.entrer.id,
-                        "libelle": entrer.entrer.libelle,
-                        "client": entrer.client.nom if entrer.client else None,
-                        "pu": entrer.pu,
-                        "qte": entrer.qte,
-                        "date": entrer.created_at,
-                        "prix_total": entrer.prix_total,
+                # Récupérer tous les historiques de sortie de cette entreprise
+                historiques_sortie = HistoriqueSortie.objects.filter(
+                    sortie__entrer__souscategorie__categorie__entreprise=entreprise
+                )
 
-                    })
+                # Combiner les deux ensembles d'historiques et les trier par date
+                historiques_combines = list(chain(historiques_entrer, historiques_sortie))
+                historiques_combines.sort(key=lambda x: x.created_at, reverse=True)
 
-                stoc = []
-                for entrer in invents:
-                    stoc.append({
-                        "prix_total": entrer.prix_total,
-                        "libelle": entrer.libelle,
-                        "pu": entrer.pu,
-                        "pu_achat": entrer.pu_achat,
-                        "date": entrer.created_at,
-                        "client": entrer.client.nom if entrer.client else None,
-                        "qte": entrer.qte,
+                # Préparer les données d'historique pour la entreprise
+                historiques_data = []
+                for historique in historiques_combines:
+                    if hasattr(historique, 'entrer'):
+                        historique_data = {
+                            "type": "entrer",
+                            "ref": historique.entrer.ref,
+                            "action": historique.action,
+                            "qte": historique.qte,
+                            "pu": historique.pu,
+                            "libelle": historique.libelle,
+                            "categorie": historique.categorie,
+                            "date": historique.created_at,
+                        }
+                    elif hasattr(historique, 'sortie'):
+                        historique_data = {
+                            "type": "sortie",
+                            "ref": historique.sortie.ref,
+                            "action": historique.action,
+                            "qte": historique.qte,
+                            "pu": historique.pu,
+                            "libelle": historique.libelle,
+                            "categorie": historique.categorie,
+                            "date": historique.created_at,
+                        }
+                    historiques_data.append(historique_data)
 
-                    })
+                # Ajouter les informations de la entreprise et son historique
+                entreprise_data = {
+                    "id": entreprise.id,
+                    "nom": entreprise.nom,
+                    "adresse": entreprise.adresse,
+                    "numero": entreprise.numero,
+                    "email": entreprise.email,
+                    "historique": historiques_data
+                }
 
-                sous_categorie.append({
-                    "sortie": list(stoc)
-                })
+                entreprises_data.append(entreprise_data)
 
-                response_data["etat"] = True
-                response_data["donnee"] = sous_categorie
-                response_data["message"] = "success"
-            else:
-                response_data["message"] = "vide"
-        else:
-            response_data["message"] = "slug non fourni"
+            response_data = {
+                "etat": True,
+                "message": "entreprises et historiques récupérés avec succès",
+                "donnee": entreprises_data
+            }
 
-    return JsonResponse(response_data)
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
+
+        return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
-def get_utilisateur_entreprise_historique(request, uuid):
-    try:
-        # Récupérer l'utilisateur avec l'ID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
+class UtilisateurEntrepriseHistoriqueSuppView(APIView):
 
-        # Récupérer les entreprises associées à cet utilisateur
-        entreprises = utilisateur.entreprises.all()
+    def get(self, request, entreprise_uuid):
+        try:
+            # Récupérer l'utilisateur avec l'ID donné
+            utilisateur = request.user
+            entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
 
-        # Préparer les données de la réponse
-        entreprises_data = []
-        for entreprise in entreprises:
             # Récupérer tous les historiques d'entrer de cette entreprise
             historiques_entrer = HistoriqueEntrer.objects.filter(
-                entrer__souscategorie__categorie__entreprise=entreprise
+                entreprise=entreprise
             )
 
             # Récupérer tous les historiques de sortie de cette entreprise
             historiques_sortie = HistoriqueSortie.objects.filter(
-                sortie__entrer__souscategorie__categorie__entreprise=entreprise
+                entreprise=entreprise
             )
 
             # Combiner les deux ensembles d'historiques et les trier par date
@@ -4270,7 +4163,7 @@ def get_utilisateur_entreprise_historique(request, uuid):
                 if hasattr(historique, 'entrer'):
                     historique_data = {
                         "type": "entrer",
-                        "ref": historique.entrer.ref,
+                        # "ref": historique.entrer.ref,
                         "action": historique.action,
                         "qte": historique.qte,
                         "pu": historique.pu,
@@ -4281,7 +4174,7 @@ def get_utilisateur_entreprise_historique(request, uuid):
                 elif hasattr(historique, 'sortie'):
                     historique_data = {
                         "type": "sortie",
-                        "ref": historique.sortie.ref,
+                        # "ref": historique.sortie.ref,
                         "action": historique.action,
                         "qte": historique.qte,
                         "pu": historique.pu,
@@ -4291,95 +4184,19 @@ def get_utilisateur_entreprise_historique(request, uuid):
                     }
                 historiques_data.append(historique_data)
 
-            # Ajouter les informations de la entreprise et son historique
-            entreprise_data = {
-                "id": entreprise.id,
-                "nom": entreprise.nom,
-                "adresse": entreprise.adresse,
-                "numero": entreprise.numero,
-                "email": entreprise.email,
-                "historique": historiques_data
+            response_data = {
+                "etat": True,
+                "message": "entreprises et historiques récupérés avec succès",
+                "donnee": historiques_data
             }
 
-            entreprises_data.append(entreprise_data)
+        except Utilisateur.DoesNotExist:
+            response_data = {
+                "etat": False,
+                "message": "Utilisateur non trouvé"
+            }
 
-        response_data = {
-            "etat": True,
-            "message": "entreprises et historiques récupérés avec succès",
-            "donnee": entreprises_data
-        }
-
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
-
-    return JsonResponse(response_data)
-
-
-@csrf_exempt
-@token_required
-def get_utilisateur_entreprise_historique_supp(request, uuid, entreprise_uuid):
-    try:
-        # Récupérer l'utilisateur avec l'ID donné
-        utilisateur = Utilisateur.objects.get(uuid=uuid)
-        entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
-
-        # Récupérer tous les historiques d'entrer de cette entreprise
-        historiques_entrer = HistoriqueEntrer.objects.filter(
-            entreprise=entreprise
-        )
-
-        # Récupérer tous les historiques de sortie de cette entreprise
-        historiques_sortie = HistoriqueSortie.objects.filter(
-            entreprise=entreprise
-        )
-
-        # Combiner les deux ensembles d'historiques et les trier par date
-        historiques_combines = list(chain(historiques_entrer, historiques_sortie))
-        historiques_combines.sort(key=lambda x: x.created_at, reverse=True)
-
-        # Préparer les données d'historique pour la entreprise
-        historiques_data = []
-        for historique in historiques_combines:
-            if hasattr(historique, 'entrer'):
-                historique_data = {
-                    "type": "entrer",
-                    # "ref": historique.entrer.ref,
-                    "action": historique.action,
-                    "qte": historique.qte,
-                    "pu": historique.pu,
-                    "libelle": historique.libelle,
-                    "categorie": historique.categorie,
-                    "date": historique.created_at,
-                }
-            elif hasattr(historique, 'sortie'):
-                historique_data = {
-                    "type": "sortie",
-                    # "ref": historique.sortie.ref,
-                    "action": historique.action,
-                    "qte": historique.qte,
-                    "pu": historique.pu,
-                    "libelle": historique.libelle,
-                    "categorie": historique.categorie,
-                    "date": historique.created_at,
-                }
-            historiques_data.append(historique_data)
-
-        response_data = {
-            "etat": True,
-            "message": "entreprises et historiques récupérés avec succès",
-            "donnee": historiques_data
-        }
-
-    except Utilisateur.DoesNotExist:
-        response_data = {
-            "etat": False,
-            "message": "Utilisateur non trouvé"
-        }
-
-    return JsonResponse(response_data)
+        return JsonResponse(response_data)
 
 
 @csrf_exempt

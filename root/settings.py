@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'corsheaders',
     'ckeditor',
     'utilisateur',
@@ -83,6 +84,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'root.wsgi.application'
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    )
+}
+
 
 # settings.py
 CORS_ALLOWED_ORIGINS = [
@@ -118,12 +128,12 @@ CORS_ALLOW_HEADERS = [
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
+# 'NAME': "digitalentreprise",
 if True:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': "digitalentreprise",
+            'NAME': "der",
             'USER': "root",
             'PASSWORD': "",
             'HOST': 'localhost',
@@ -133,9 +143,9 @@ if True:
         # Pour gest-stocks.com
         # 'default': {
         #     'ENGINE': 'django.db.backends.mysql',
-        #     'NAME': "dich5095_entreback",
-        #     'USER': "dich5095_entreback_user",
-        #     'PASSWORD': "Bonjourd@10",
+        #     'NAME': "sc1dich5095_der",
+        #     'USER': "sc1dich5095_deruser",
+        #     'PASSWORD': "Bonjour@10",
         #     'HOST': 'localhost',
         #     'PORT': '3306',
         # }
@@ -143,9 +153,9 @@ if True:
         # Pour le back.diakitedigital.com
         # 'default': {
         #     'ENGINE': 'django.db.backends.mysql',
-        #     'NAME': "dich5095_entreback",
-        #     'USER': "dich5095_entreback_user",
-        #     'PASSWORD': "Bonjour@#0",
+        #     'NAME': "dich5095_ok",
+        #     'USER': "dich5095_okuser",
+        #     'PASSWORD': "Bonjour@10",
         #     'HOST': 'localhost',
         #     'PORT': '3306',
         # }

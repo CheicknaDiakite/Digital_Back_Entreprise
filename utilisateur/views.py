@@ -14,6 +14,10 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Token, Utilisateur
 from fonction import token_required
@@ -102,6 +106,7 @@ def api_user_login(request):
                    Utilisateur.objects.filter(numero=login_input).first()
 
             if user:
+
                 if check_password(password, user.password):
                     # Supprime l'ancien token et en crée un nouveau
                     Token.objects.filter(user=user).delete()
@@ -213,8 +218,8 @@ def api_user_register(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_user_admin_register(request):
     response_data = {'message': "requête invalide", 'etat': False, 'id': ""}
 
@@ -316,8 +321,98 @@ def api_user_admin_register(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+class UserAdminRegisterView(APIView):
+
+    def post(self, request):
+        response_data = {'message': "requête invalide", 'etat': False, 'id': ""}
+
+        form = request.data  # DRF gère déjà JSON
+
+        required_fields = ["password", "first_name", "last_name", "email_user", "entreprise_id"]
+        if not all(field in form for field in required_fields):
+            return Response(response_data)
+
+        password = form.get("password")
+        first_name = form.get("first_name")
+        numero = form.get("numero")
+        role = form.get("role")
+        last_name = form.get("last_name")
+        email_user = form.get("email_user")
+        entreprise_id = form.get("entreprise_id")
+
+        admin_user = request.user
+        created_users_count = Utilisateur.objects.filter(created_by=admin_user).count()
+
+        if created_users_count >= 5:
+            response_data["message"] = "Vous avez atteint la limite de 5 utilisateurs créés."
+            return Response(response_data)
+
+        try:
+            entreprise = Entreprise.objects.get(uuid=entreprise_id)
+        except Entreprise.DoesNotExist:
+            response_data["message"] = "Entreprise non sélectionnée ou inexistante"
+            return Response(response_data)
+
+        if Utilisateur.objects.filter(email_user=email_user).exists():
+            response_data["message"] = "Cet email est déjà utilisé"
+            return Response(response_data)
+
+        # Génération du nom d'utilisateur unique
+        base_username = f"{first_name[:2].lower()}0001{last_name[:2].lower()}"
+        username = base_username
+        counter = 1
+        while Utilisateur.objects.filter(username=username).exists():
+            counter += 1
+            username = f"{first_name[:2].lower()}{counter:04d}{last_name[:2].lower()}"
+
+        try:
+            # Préparation e-mail
+            html_text = render_to_string('mail.html', context={
+                "sujet": "Inscription reçue sur Gest Stocks (Gestion de Stock)",
+                "message": (
+                    f"Bonjour <b>{first_name} {last_name}</b>,<br><br>"
+                    "🎉 <b>Félicitations !</b> Votre inscription a bien été enregistrée.<br><br>"
+                    f"🔐 <b>Votre nom d'utilisateur est :</b> <b>{username}</b><br><br>"
+                    "— L’équipe Diakite Digital"
+                )
+            })
+
+            email_sent = send(
+                sujet="Inscription reçue chez Diakite Digital",
+                message="",
+                email_liste=[request.user.email],
+                html_message=html_text,
+            )
+
+            if not email_sent:
+                response_data["message"] = "Échec de l'envoi de l'e-mail."
+                return Response(response_data)
+
+            # Création de l’utilisateur
+            new_user = Utilisateur.objects.create_user(
+                first_name=first_name,
+                last_name=last_name,
+                username=username,
+                numero=numero,
+                role=role,
+                email_user=email_user,
+                password=password,
+                created_by=admin_user
+            )
+            new_user.entreprises.add(entreprise)
+
+            response_data["etat"] = True
+            response_data["id"] = new_user.id
+            response_data["message"] = "success"
+            return Response(response_data)
+
+        except Exception as e:
+            response_data["message"] = f"Erreur lors du traitement : {str(e)}"
+            return Response(response_data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_user_cabinet_register(request):
     response_data = {'message': "requête invalide", 'etat': False, 'id': ""}
 
@@ -329,6 +424,7 @@ def api_user_cabinet_register(request):
 
         required_fields = ["password", "first_name", "last_name", "email"]
         if all(field in form for field in required_fields):
+
             password = form.get("password")
             first_name = form.get("first_name")
             numero = form.get("numero")
@@ -346,7 +442,7 @@ def api_user_cabinet_register(request):
             # Vérification de l'existence de l'utilisateur avec le même username ou email
 
             if Utilisateur.objects.filter(email=email_user).exists():
-                response_data["message"] = "cet email est déjà utilisé"
+                response_data["message"] = "cet email est deja utilise"
             else:
                 # Génération du nom d'utilisateur unique
                 base_username = f"{first_name[:2].lower()}0001{last_name[:2].lower()}"
@@ -411,8 +507,8 @@ def api_user_cabinet_register(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_user_set_profil(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -426,13 +522,12 @@ def api_user_set_profil(request):
         user_all = Utilisateur.objects.all()
         user_id = form.get("user_id")
 
-        user_conect = user_all.filter(uuid=user_id).first()
+        user_conect = request.user
 
         modifier = False
         if user_conect:
-            print("uu ..", user_conect)
+
             if (user_conect.groups.filter(name="Admin").exists()
-                    or user_conect.groups.filter(name="Editor").exists()
                     or user_conect.groups.filter(name="Editor").exists()
                     or user_conect.groups.filter(name="Visitor").exists()):
                 # if user_conect.has_perm('entreprise.change_utilisateur'):
@@ -588,47 +683,51 @@ def api_user_set_profil(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def del_user(request):
-    response_data = {'message': "requette invalide", 'etat': False}
+    response_data = {'message': "requête invalide", 'etat': False}
 
-    if request.method == "POST":
-        form = dict()
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except:
-            return JsonResponse({'message': "Erreur lors de le lecture des donnees JSON", 'etat': False})
+    try:
+        form = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
 
-        print(form)
+    id = form.get("uuid")
+    slug = form.get("slug")
+    user_id = form.get("user_id")
 
-        id = form.get("uuid")
-        slug = form.get("slug")
-        user_id = form.get("user_id")
-        user = Utilisateur.objects.filter(uuid=user_id).first()
+    # Vérifier si l'utilisateur qui fait l'action existe
+    user = Utilisateur.objects.filter(uuid=user_id).first()
+    if not user:
+        response_data["message"] = "Utilisateur non trouvé."
+        return JsonResponse(response_data)
 
-        if user:
-            if user.groups.filter(name="Admin").exists():
-                # if user.has_perm('boutique.delete_boutique'):
-                if id:
-                    boutique_from_database = Utilisateur.objects.all().filter(uuid=id).first()
-                else:
-                    boutique_from_database = Utilisateur.objects.all().filter(slug=slug).first()
+    # Vérifier que l'utilisateur est admin
+    if not user.groups.filter(name="Admin").exists():
+        response_data["message"] = "Vous n'avez pas la permission de supprimer un utilisateur."
+        return JsonResponse(response_data)
 
-                if not boutique_from_database:
-                    response_data["message"] = "utilisateur non trouvé"
-                else:
+    # Trouver l’utilisateur à supprimer
+    if id:
+        target_user = Utilisateur.objects.filter(uuid=id).first()
+    else:
+        target_user = Utilisateur.objects.filter(slug=slug).first()
 
-                    boutique_from_database.delete()
-                    response_data["etat"] = True
-                    response_data["message"] = "success"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission de supprimer une boutique."
-        else:
-            response_data["message"] = "Utilisateur non trouvé."
+    if not target_user:
+        response_data["message"] = "Utilisateur à supprimer non trouvé."
+        return JsonResponse(response_data)
+
+    # Vérifier s’il est lié à une entreprise
+    if target_user.entreprises.exists():
+        response_data["message"] = "Impossible de supprimer cet utilisateur car il est rattaché à une entreprise."
+        return JsonResponse(response_data)
+
+    # Si tout est bon → suppression
+    target_user.delete()
+    response_data["etat"] = True
+    response_data["message"] = "Utilisateur supprimé avec succès."
     return JsonResponse(response_data)
-
 
 @csrf_exempt
 def api_update_password(request):
@@ -680,14 +779,15 @@ def api_update_password(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def api_user_all(request, uuid):
     try:
+        us = request.user
         # Récupérer l'utilisateur avec l'ID donné
         utilisateur = Utilisateur.objects.filter(uuid=uuid).first()
 
-        if utilisateur and utilisateur.is_superuser:
+        if utilisateur and us.is_superuser:
             # Filtrer les utilisateurs sans `created_by`
             all_use = Utilisateur.objects.filter(created_by__isnull=True)
 
@@ -728,8 +828,8 @@ def api_user_all(request, uuid):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def api_mes_user_all(request, uuid):
     try:
         # Récupérer l'utilisateur avec l'ID donné
@@ -857,8 +957,8 @@ def api_mes_user_all(request, uuid):
 #
 #     return JsonResponse(response_data)
 
-@csrf_exempt
-@token_required
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def api_user_get(request):
     response_data = {'message': "Requête invalide", 'etat': False}
 
@@ -945,8 +1045,8 @@ def api_user_get(request):
     return JsonResponse(response_data)
 
 
-@csrf_exempt
-@token_required
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def api_user_get_profil(request, uuid):
     message = "requette invalide"
     donnee = dict()
