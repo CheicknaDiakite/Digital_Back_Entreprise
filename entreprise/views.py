@@ -2400,48 +2400,6 @@ def get_depense_un(request, uuid):
     return JsonResponse(response_data)
 
 
-# @csrf_exempt
-# @token_required
-# def get_depenses_entreprise(request, uuid):
-#     try:
-#         # Récupérer l'utilisateur avec l'ID donné
-#         utilisateur = Utilisateur.objects.get(uuid=uuid)
-#
-#         # Récupérer toutes les entreprises associées à cet utilisateur
-#         entreprises = utilisateur.entreprises.all()
-#
-#         # Récupérer toutes les catégories associées à ces entreprises
-#         entrers = Depense.objects.filter(entreprise__in=entreprises)
-#
-#         # Préparer les données de la réponse
-#         categories_data = [
-#             {
-#                 "id": liv.id,
-#                 "uuid": liv.uuid,
-#
-#                 "slug": liv.slug,
-#                 "libelle": liv.libelle,
-#                 "somme": liv.somme,
-#
-#                 "date": str(liv.created_at),
-#
-#             }
-#             for liv in entrers
-#         ]
-#
-#         response_data = {
-#             "etat": True,
-#             "message": "Catégories récupérées avec succès",
-#             "donnee": categories_data
-#         }
-#     except Utilisateur.DoesNotExist:
-#         response_data = {
-#             "etat": False,
-#             "message": "Utilisateur non trouvé"
-#         }
-#
-#     return JsonResponse(response_data)
-
 class DepensesEntrepriseAPIView(APIView):
 
     def get(self, request, entreprise_id):
