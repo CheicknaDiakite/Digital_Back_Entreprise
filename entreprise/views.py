@@ -264,6 +264,7 @@ class AddEntrepriseView(APIView):
             "message": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(["Get"])
 @permission_classes([IsAuthenticated])
 def get_entreprise_un(request, uuid):
@@ -761,8 +762,8 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
         # ➤ Nouveaux totaux groupés par mois pour les Entrées
         details_entrer_par_mois = {}
         for item in entrers.annotate(month=TruncMonth('created_at')).values('month').annotate(
-            somme_qte=Sum('qte'),
-            somme_prix_total=Sum('pu')
+                somme_qte=Sum('qte'),
+                somme_prix_total=Sum('pu')
         ).order_by('month'):
             mois = item['month'].strftime("%B %Y")
             details_entrer_par_mois[mois] = {
@@ -773,8 +774,8 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
         # ➤ Nouveaux totaux groupés par mois pour les Sorties
         details_sortie_par_mois = {}
         for item in sorties.annotate(month=TruncMonth('created_at')).values('month').annotate(
-            somme_qte=Sum('qte'),
-            somme_prix_total=Sum(F('pu') * F('qte'))
+                somme_qte=Sum('qte'),
+                somme_prix_total=Sum(F('pu') * F('qte'))
         ).order_by('month'):
             mois = item['month'].strftime("%B %Y")
             details_sortie_par_mois[mois] = {
@@ -1547,6 +1548,7 @@ class AddCategorieView(APIView):
             "donnee": serializer.data
         }, status=status.HTTP_201_CREATED)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def get_categorie(request):
@@ -1878,6 +1880,7 @@ class AddSousCategorieAPIView(APIView):
         })
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 class SousCategoriesUtilisateurAPIView(APIView):
 
@@ -2232,7 +2235,7 @@ class DepenseCreateView(APIView):
             return Response({"message": "ID de l'utilisateur manquant !", "etat": False},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        admin = request.user
         if not admin:
             return Response({"message": "Admin non trouvé", "etat": False},
                             status=status.HTTP_404_NOT_FOUND)
@@ -2266,6 +2269,7 @@ class DepenseCreateView(APIView):
             "message": "success",
             "data": serializer.data
         }, status=status.HTTP_201_CREATED)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -2515,7 +2519,7 @@ class AddEntrerView(APIView):
         user_id = data.get("user_id")
 
         # Vérification utilisateur
-        admin = Utilisateur.objects.filter(uuid=user_id).first()
+        admin = request.user
         if not admin:
             return Response({"etat": False, "message": "Utilisateur introuvable"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2582,7 +2586,7 @@ def del_entre(request):
         user = Utilisateur.objects.filter(uuid=user_id).first()
 
         if user:
-            # if user.has_perm('entreprise.delete_entrer'):
+
             if (user.groups.filter(name="Admin").exists()
                     or user.groups.filter(name="Editor").exists()
             ):
@@ -3070,12 +3074,13 @@ class SortieCreateView(APIView):
         client_id = data.get("client_id")
 
         # Vérif admin
-        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        admin = request.user
         if not admin:
             return Response({'etat': False, 'message': "Admin non trouvé"}, status=status.HTTP_404_NOT_FOUND)
 
         if not (admin.groups.filter(name__in=["Admin", "Editor", "Author"]).exists()):
-            return Response({'etat': False, 'message': "Vous n'avez pas la permission"}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'etat': False, 'message': "Vous n'avez pas la permission"},
+                            status=status.HTTP_403_FORBIDDEN)
 
         # Vérif entrée
         entrer = Entrer.objects.filter(uuid=entrer_id).first()
@@ -3105,6 +3110,7 @@ class SortieCreateView(APIView):
             "message": "success",
             "donnee": serializer.data
         }, status=status.HTTP_201_CREATED)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -3220,7 +3226,8 @@ def update_sorties(request):
             else:
                 sortie_ids = data
         else:
-            return JsonResponse({"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
+            return JsonResponse(
+                {"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
 
         # Vérification que sortie_ids est une liste non vide
         if not sortie_ids or not isinstance(sortie_ids, list):
@@ -3233,6 +3240,7 @@ def update_sorties(request):
         })
 
     return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -3256,7 +3264,8 @@ def update_fac_sorties(request):
             else:
                 sortie_ids = data
         else:
-            return JsonResponse({"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
+            return JsonResponse(
+                {"message": "Le format des données JSON doit être un objet ou une liste", "etat": False}, status=400)
 
         # Vérification que sortie_ids est une liste non vide
         if not sortie_ids or not isinstance(sortie_ids, list):
@@ -3492,7 +3501,7 @@ class AddFactureEntreView(APIView):
         if not admin_id:
             return Response({"etat": False, "message": "user_id manquant"}, status=status.HTTP_400_BAD_REQUEST)
 
-        admin = Utilisateur.objects.filter(uuid=admin_id).first()
+        admin = request.user
         if not admin:
             return Response({"etat": False, "message": "Admin non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -4011,6 +4020,7 @@ class InfoSousCatView(APIView):
             {"etat": True, "message": "success", "donnee": sortie_data},
             status=status.HTTP_200_OK
         )
+
 
 class UtilisateurEntrepriseHistoriqueView(APIView):
 
