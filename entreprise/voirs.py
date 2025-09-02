@@ -350,10 +350,18 @@ class SommeQtePuSortieView(APIView):
             return Response({"etat": False, "message": "Entreprise non trouvée pour cet utilisateur"}, status=status.HTTP_404_NOT_FOUND)
 
 
+from collections import defaultdict
+from django.db.models import Sum, Count
+from django.db.models.functions import TruncMonth
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+
 class CountSortieParUtilisateurView(APIView):
-    # permission_classes = [permissions.IsAuthenticated]  # Adapter selon besoin
+    permission_classes = [permissions.IsAuthenticated]  # Active l’authentification
 
     def get(self, request, entreprise_id):
+        # Vérifier que l’entreprise existe
         try:
             entreprise = Entreprise.objects.get(uuid=entreprise_id)
         except Entreprise.DoesNotExist:
@@ -362,64 +370,58 @@ class CountSortieParUtilisateurView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # QuerySet des sorties de l'entreprise
+        # QuerySet des sorties de l’entreprise
         qs = Sortie.objects.filter(
             entrer__souscategorie__categorie__entreprise=entreprise
         ).select_related('created_by')
 
-        # 1) Total des quantités vendues par utilisateur (username)
-        total_par_user = (
-            qs.values('created_by__username')
+        # 1) Total des quantités vendues par utilisateur
+        total_qte_par_user = (
+            qs.values('created_by__id', 'created_by__username')
             .annotate(total_qte=Sum('qte'))
             .order_by('-total_qte')
         )
 
         total_par_utilisateur = [
-            {'username': rec['created_by__username'], 'total_qte': rec['total_qte'] or 0}
-            for rec in total_par_user
+            {
+                'user_id': rec['created_by__id'],
+                'username': rec['created_by__username'] or "Inconnu",
+                'total_qte': rec['total_qte'] or 0
+            }
+            for rec in total_qte_par_user
         ]
 
-        # 2) Nombre total de sorties par utilisateur
+        # 2) Nombre total de ventes (sorties) par utilisateur
         total_nombre_vente = (
             qs.values('created_by__id', 'created_by__username')
             .annotate(total=Count('id'))
             .order_by('-total')
         )
 
-        # 3) Total des quantités vendues par utilisateur par mois
+        # 3) Quantités vendues par utilisateur **par mois**
         qs_monthly = (
             qs.annotate(mois=TruncMonth('created_at'))
-            .values('created_by__username', 'mois')
-            .annotate(somme_qte=Sum('qte'))
-            .order_by('created_by__username', 'mois')
+            .values('created_by__id', 'created_by__username', 'mois')
+            .annotate(total_qte=Sum('qte'))
+            .order_by('mois', 'created_by__username')
         )
 
-        # Organiser les données par mois pour affichage
-        resultats_par_mois = []
-        mois_actuel = None
-        details = []
-
+        # Regrouper les données par mois
+        mois_groupes = defaultdict(list)
         for rec in qs_monthly:
-            mois = rec['mois'].strftime("%B %Y")
-            if mois_actuel and mois_actuel != mois:
-                resultats_par_mois.append({
-                    "month": mois_actuel,
-                    "details": details
-                })
-                details = []
-
-            details.append({
+            mois_str = rec['mois'].strftime('%B %Y').capitalize()
+            mois_groupes[mois_str].append({
+                'user_id': rec['created_by__id'],
                 'username': rec['created_by__username'] or "Inconnu",
-                'total_qte': rec['somme_qte'] or 0
-            })
-            mois_actuel = mois
-
-        if mois_actuel:
-            resultats_par_mois.append({
-                "month": mois_actuel,
-                "details": details
+                'total_qte': rec['total_qte'] or 0
             })
 
+        resultats_par_mois = [
+            {"month": mois, "details": details}
+            for mois, details in mois_groupes.items()
+        ]
+
+        # Données finales
         data = {
             'total_par_utilisateur': total_par_utilisateur,
             'total_nombre_vente': list(total_nombre_vente),
@@ -431,8 +433,6 @@ class CountSortieParUtilisateurView(APIView):
             'message': "Somme des quantités vendues par utilisateur (total et mensuel)",
             'donnee': data
         }, status=status.HTTP_200_OK)
-
-
 class DepensesSommeParMoisView(APIView):
     permission_classes = [permissions.IsAuthenticated]  # Authentification requise
 

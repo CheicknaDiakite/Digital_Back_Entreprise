@@ -885,106 +885,73 @@ def api_somme_qte_pu_sortie(request, entreprise_id, user_id):
 #         'donnee': data
 #     })
 
-@api_view(["POST"])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def api_count_sortie_par_utilisateur(request, entreprise_id):
+    # Vérifier que l’entreprise existe
     try:
         entreprise = Entreprise.objects.get(uuid=entreprise_id)
     except Entreprise.DoesNotExist:
-        return JsonResponse({'etat': False, 'message': "Entreprise non trouvée"})
+        return JsonResponse({'etat': False, 'message': "Entreprise non trouvée"}, status=404)
 
-    # Base queryset des sorties de l'entreprise
+    # Base queryset des sorties liées à cette entreprise
     qs = Sortie.objects.filter(
         entrer__souscategorie__categorie__entreprise=entreprise
     ).select_related('created_by')
 
-    # ————————————————————————————
-    # 1) Total des qte vendues par utilisateur
-    # ————————————————————————————
-    total_par_user = (
-        qs
-        .values('created_by__username')
+    # 1) Total des quantités vendues par utilisateur
+    total_qte_par_user = (
+        qs.values('created_by__id', 'created_by__username')
         .annotate(total_qte=Sum('qte'))
         .order_by('-total_qte')
     )
-    # formaté en liste de { username, total_qte }
+
     total_par_utilisateur = [
-        {'username': rec['created_by__username'], 'total_qte': rec['total_qte'] or 0}
-        for rec in total_par_user
+        {
+            'user_id': rec['created_by__id'],
+            'username': rec['created_by__username'] or "Inconnu",
+            'total_qte': rec['total_qte'] or 0
+        }
+        for rec in total_qte_par_user
     ]
 
-    total_par_user = (
+    # 2) Nombre total de ventes (comptage des sorties) par utilisateur
+    total_nombre_vente = (
         qs.values('created_by__id', 'created_by__username')
         .annotate(total=Count('id'))
         .order_by('-total')
     )
 
-    # ————————————————————————————
-    # 2) Total des qte vendues par utilisateur **par mois**
-    # ————————————————————————————
+    # 3) Total des quantités vendues par utilisateur **par mois**
     qs_monthly = (
-        qs
-        .annotate(mois=TruncMonth('created_at'))
-        .values('created_by__username', 'mois')
-        .annotate(somme_qte=Sum('qte'))
-        .order_by('created_by__username', 'mois')
+        qs.annotate(mois=TruncMonth('created_at'))
+        .values('created_by__id', 'created_by__username', 'mois')
+        .annotate(total_qte=Sum('qte'))
+        .order_by('mois', 'created_by__username')
     )
 
-    # mensuel_par_utilisateur = [
-    #     {
-    #         'username': rec['created_by__username'] or "Inconnu",
-    #         'mois': rec['mois'].strftime("%B %Y"),
-    #         'total_qte': rec['somme_qte'] or 0
-    #     }
-    #     for rec in qs_monthly
-    # ]
-
-    # Pour affichage en français
-    # try:
-    #     locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
-    # except locale.Error:
-    #     pass
-
-    # Structure : { "Janvier 2025": [ {username, total_qte}, ... ] }
-    donnees_par_mois = defaultdict(list)
+    # Structurer les données par mois
+    resultats_par_mois = []
+    mois_groupes = defaultdict(list)
 
     for rec in qs_monthly:
         mois_str = rec['mois'].strftime('%B %Y').capitalize()
-
-        donnees_par_mois[mois_str].append({
+        mois_groupes[mois_str].append({
+            'user_id': rec['created_by__id'],
             'username': rec['created_by__username'] or "Inconnu",
-            'total_qte': rec['somme_qte'] or 0
+            'total_qte': rec['total_qte'] or 0
         })
 
-    resultats_par_mois = []
-    mois_actuel = None
-    details = []
-
-    for rec in qs_monthly:
-        mois = rec['mois'].strftime("%B %Y")
-
-        if mois_actuel and mois_actuel != mois:
-            resultats_par_mois.append({
-                "month": mois_actuel,
-                "details": details
-            })
-            details = []
-
-        details.append({
-            'username': rec['created_by__username'] or "Inconnu",
-            'total_qte': rec['somme_qte'] or 0
-        })
-        mois_actuel = mois
-
-    if mois_actuel:
+    for mois, details in mois_groupes.items():
         resultats_par_mois.append({
-            "month": mois_actuel,
+            "month": mois,
             "details": details
         })
 
+    # Résultats finaux
     data = {
         'total_par_utilisateur': total_par_utilisateur,
-        'total_nombre_vente': list(total_par_user),
+        'total_nombre_vente': list(total_nombre_vente),
         'mensuel_par_utilisateur': resultats_par_mois,
     }
 
@@ -993,7 +960,6 @@ def api_count_sortie_par_utilisateur(request, entreprise_id):
         'message': "Somme des quantités vendues par utilisateur (total et mensuel)",
         'donnee': data
     })
-
 
 # @csrf_exempt
 # @token_required
