@@ -179,9 +179,79 @@ def del_avis(request):
     return JsonResponse(response_data)
 
 
+# Pour les Entreprise
+
+# @csrf_exempt
+# @token_required
+# def add_entreprise(request):
+#     response_data = {'message': "requête invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         try:
+#             form = json.loads(request.body.decode("utf-8"))
+#         except json.JSONDecodeError:
+#             return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+#
+#         nom = form.get("nom")
+#         adresse = form.get("adresse")
+#         numero = form.get("numero")
+#         email = form.get("email")
+#         libelle = form.get("libelle")
+#         user_id = form.get("user_id")
+#         type_licence = form.get("type_licence", 1)  # Licence par défaut
+#         user = Utilisateur.objects.filter(uuid=user_id).first()
+#
+#         if user:
+#
+#             if user.entreprises.count() >= 3:
+#                 response_data["message"] = "Vous possédez déjà plus de 3 entreprises."
+#                 return JsonResponse(response_data)
+#
+#             # Créer une licence associée à la entreprise
+#             if type_licence == 1:
+#                 date_expiration = datetime.now().date() + timedelta(days=30)  # Licence gratuite de 30 jours
+#             elif type_licence == 2:
+#                 date_expiration = datetime.now().date() + timedelta(days=180)  # Licence de 6 mois
+#             elif type_licence == 3:
+#                 date_expiration = datetime.now().date() + timedelta(days=365)  # Licence d'un an
+#             else:
+#                 response_data['message'] = "Type de licence invalide."
+#                 return JsonResponse(response_data)
+#
+#             # Créer et associer la licence à la entreprise
+#             licence = Licence.objects.create(type=type_licence, date_expiration=date_expiration)
+#
+#             # Vérification des permissions de l'utilisateur
+#             # if user.has_perm('entreprise.add_entreprise'):
+#             if user.groups.filter(name="Admin").exists():
+#
+#                 entreprise = Entreprise.objects.create(
+#                     nom=nom,
+#                     adresse=adresse,
+#                     libelle=libelle,
+#                     numero=numero,
+#                     email=email,
+#                     licence=licence
+#                 )
+#
+#                 entreprise.utilisateurs.add(user)
+#
+#                 response_data["etat"] = True
+#                 response_data["id"] = entreprise.id
+#                 # response_data["slug"] = new_entreprise.slug
+#                 response_data["message"] = "success"
+#             else:
+#                 # L'utilisateur n'a pas la permission d'ajouter une catégorie
+#                 response_data["message"] = "Vous n'avez pas la permission d'ajouter une entreprise."
+#         else:
+#             response_data["message"] = "Utilisateur non trouvé."
+#
+#         # Autres cas d'erreurs...
+#     return JsonResponse(response_data)
+
 class AddEntrepriseView(APIView):
     def post(self, request, *args, **kwargs):
-        serializer = EntrepriseSerializer(data=request.data)
+        serializer = EntrepriseSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             entreprise = serializer.save()
             return Response({
@@ -349,6 +419,50 @@ def del_entreprise(request):
         response_data["message"] = "Entreprise supprimée avec succès."
 
     return JsonResponse(response_data)
+
+
+# @csrf_exempt
+# @token_required
+# def del_entreprise(request):
+#     response_data = {'message': "requette invalide", 'etat': False}
+#
+#     if request.method == "POST":
+#         form = dict()
+#         try:
+#             form = json.loads(request.body.decode("utf-8"))
+#         except:
+#             return JsonResponse({'message': "Erreur lors de le lecture des donnees JSON", 'etat': False})
+#
+#         if "id" in form or "slug" in form and "user_id" in form:
+#             id = form.get("uuid")
+#             slug = form.get("slug")
+#             user_id = form.get("user_id")
+#             user = Utilisateur.objects.filter(uuid=user_id).first()
+#
+#             if user:
+#                 if user.groups.filter(name="Admin").exists():
+#                     # if user.has_perm('entreprise.delete_entreprise'):
+#                     if id:
+#                         entreprise_from_database = Entreprise.objects.all().filter(uuid=id).first()
+#                     else:
+#                         entreprise_from_database = Entreprise.objects.all().filter(slug=slug).first()
+#
+#                     if not entreprise_from_database:
+#                         response_data["message"] = "categorie non trouvé"
+#                     else:
+#                         if len(entreprise_from_database.categorie) > 0:
+#                             response_data[
+#                                 "message"] = f"cette entreprise possède {len(entreprise_from_database.sous_categorie)} categorie"
+#                         else:
+#                             entreprise_from_database.delete()
+#                             response_data["etat"] = True
+#                             response_data["message"] = "success"
+#                 else:
+#                     # L'utilisateur n'a pas la permission d'ajouter une catégorie
+#                     response_data["message"] = "Vous n'avez pas la permission de supprimer une entreprise."
+#             else:
+#                 response_data["message"] = "Utilisateur non trouvé."
+#     return JsonResponse(response_data)
 
 
 @api_view(["POST"])
@@ -2578,7 +2692,7 @@ def set_entre(request):
             return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
 
         user_id = form.get("user_id")
-        user = Utilisateur.objects.filter(uuid=user_id).first()
+        user = request.user
         if user:
             # Vérification des permissions de l'utilisateur
             if user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists():

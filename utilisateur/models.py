@@ -151,8 +151,8 @@ class Licence(models.Model):
     PREMUIM = 3
 
     TYPE_CHOICES = [
-        (FREE, 'Free'),
-        (BASIC, 'Basic'),
+        (FREE, 'Essai'),
+        (BASIC, 'Standard'),
         (PREMUIM, 'Premium'),
     ]
 

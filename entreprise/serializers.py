@@ -7,25 +7,32 @@ from .models import Categorie, Entreprise, Depense, Sortie, Client, SousCategori
 
 
 class EntrepriseSerializer(serializers.ModelSerializer):
-    user_id = serializers.UUIDField(write_only=True)
+    # user_id = serializers.UUIDField(write_only=True)
     type_licence = serializers.IntegerField(write_only=True, default=1)
 
     class Meta:
         model = Entreprise
-        fields = ["id", "nom", "adresse", "numero", "email", "libelle", "user_id", "type_licence"]
+        fields = ["id", "nom", "adresse", "numero", "email", "libelle", "type_licence"]
 
     def create(self, validated_data):
-        user_id = validated_data.pop("user_id")
+        # user_id = validated_data.pop("user_id")
         type_licence = validated_data.pop("type_licence", 1)
 
         # Vérifier si l'utilisateur existe
-        user = Utilisateur.objects.filter(uuid=user_id).first()
-        if not user:
-            raise serializers.ValidationError("Utilisateur non trouvé.")
+        # user = Utilisateur.objects.filter(uuid=user_id).first()
+        # if not user:
+        #     raise serializers.ValidationError("Utilisateur non trouvé.")
+        request = self.context.get("request")
+        user = request.user if request else None
+        type_licence = validated_data.pop("type_licence", 1)
+
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Utilisateur non authentifié.")
+
 
         # Vérifier le nombre d’entreprises max
-        if user.entreprises.count() >= 3:
-            raise serializers.ValidationError("Vous possédez déjà plus de 3 entreprises.")
+        if user.entreprises.count() >= 10:
+            raise serializers.ValidationError("Vous possédez déjà plus de 10 entreprises.")
 
         # Calcul de la date d’expiration de la licence
         if type_licence == 1:
