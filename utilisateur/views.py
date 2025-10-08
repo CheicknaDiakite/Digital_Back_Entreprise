@@ -785,9 +785,9 @@ def api_user_all(request, uuid):
     try:
         us = request.user
         # Récupérer l'utilisateur avec l'ID donné
-        utilisateur = Utilisateur.objects.filter(uuid=uuid).first()
+        # utilisateur = Utilisateur.objects.filter(uuid=uuid).first()
 
-        if utilisateur and us.is_superuser:
+        if us and us.is_superuser:
             # Filtrer les utilisateurs sans `created_by`
             all_use = Utilisateur.objects.filter(created_by__isnull=True)
 
