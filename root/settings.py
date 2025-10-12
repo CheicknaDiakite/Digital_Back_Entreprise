@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
 from pathlib import Path
-
+from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -91,6 +91,20 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     )
+}
+
+# ...existing code...
+
+# Si tu utilises l'authentification par session (cookies)
+SESSION_COOKIE_AGE = 24 * 3600  # 24 heures en secondes
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Si tu utilises Simple JWT (recommandé pour les API)
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=24),   # token d'accès valide 24h
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),    # token de refresh (ajuster si besoin)
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
 }
 
 
