@@ -6,7 +6,7 @@ from io import BytesIO
 from itertools import chain
 
 import qrcode
-from PIL import ImageFont, ImageDraw
+from PIL import ImageFont, ImageDraw, Image
 from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.db.models import Sum, Q, Count, F, Func, IntegerField
@@ -2613,7 +2613,36 @@ class AddEntrerView(APIView):
         img_qr.save(buffer, format="PNG")
         buffer.seek(0)
 
-        entrer.barcode.save(f"{ref}.png", File(buffer), save=True)
+        # Calcul des dimensions du texte avec textbbox
+        draw = ImageDraw.Draw(img_qr)
+        bbox = draw.textbbox((0, 0), ref, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        # Création d'une nouvelle image avec un espace en bas pour le texte
+        new_width = max(img_qr.width, text_width)
+        new_height = img_qr.height + text_height + 10  # 10 pixels de marge
+        new_img = Image.new("RGB", (new_width, new_height), "white")
+
+        # Positionner le QR code dans la nouvelle image
+        x_offset = (new_width - img_qr.width) // 2
+        new_img.paste(img_qr, (x_offset, 0))
+
+        # Dessiner le texte en dessous du QR code, centré horizontalement
+        draw = ImageDraw.Draw(new_img)
+        text_x = (new_width - text_width) // 2
+        text_y = img_qr.height + 5  # 5 pixels de marge
+        draw.text((text_x, text_y), ref, fill="black", font=font)
+
+        # Sauvegarder l'image finale dans un buffer
+        buffer = BytesIO()
+        new_img.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        # Enregistrer l'image dans le champ ImageField
+        entrer.barcode.save(f'{ref}.png', File(buffer), save=True)
+
+        # entrer.barcode.save(f"{ref}.png", File(buffer), save=True)
 
 
 class EntrerViewSet(viewsets.ModelViewSet):
