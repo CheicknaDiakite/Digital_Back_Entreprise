@@ -1,9 +1,11 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
 from .views import AddEntrepriseView, del_entreprise, get_entreprise, AddCategorieView, del_categorie, \
     CategoriesUserAPIView, CategorieDetailView, get_utilisateur_entreprise, SousCategoriesEntrepriseView, \
     AddSousCategorieAPIView, get_categorie, get_entrers_entreprise, SousCategoriesUtilisateurAPIView, AddEntrerView, \
-    get_sous_categorie, InfoSousCatView, get_sortie, get_sorties_entreprise, SortieCreateView, EntrepriseUtilisateursView, \
+    get_sous_categorie, InfoSousCatView, get_sortie, get_sorties_entreprise, SortieCreateView, \
+    EntrepriseUtilisateursView, \
     api_somme_qte_pu_sortie, get_entreprise_un, FacSortiesUserAPIView, DepensesEntrepriseAPIView, DepenseCreateView, \
     get_depense_un, AddFactureSortieView, get_facture_sortie_un, get_facture_entre_un, FacEntresUserAPIView, \
     AddFactureEntreView, set_depense, set_facture_entre, set_facture_sortie, del_depense, del_facture_entre, \
@@ -13,12 +15,18 @@ from .views import AddEntrepriseView, del_entreprise, get_entreprise, AddCategor
     SousCategorieUnEntrepriseView, \
     del_sous_categorie, set_sous_categorie, set_entre, ordre_paiement, pay_entreprise_get_historique, \
     paiement_entreprise_callback, add_avis, get_avis, del_avis, sous_categories_sorties_par_mois, update_sorties, \
-    update_fac_sorties, api_count_sortie_par_utilisateur, get_depenses_somme
+    update_fac_sorties, api_count_sortie_par_utilisateur, get_depenses_somme, EntrerViewSet
 from .voirs import CategorieListCreateView, UtilisateurEntreprisesView, EntrepriseDetailView, EntrepriseCreateView, \
     SommeQtePuSortieView, CountSortieParUtilisateurView, DepensesEntrepriseView, DepensesSommeParMoisView, \
     SousCategoriesSortiesParMoisView, SortiesEntrepriseAPIView, ClientListAPIView, EntresEntrepriseAPIView
 
+
+router = DefaultRouter()
+router.register("entrers", EntrerViewSet, basename="entrers")
+
 urlpatterns = [
+    path("", include(router.urls)),
+
     path("cate_api", CategorieListCreateView.as_view()),
     path("user_entreprises", UtilisateurEntreprisesView.as_view(), name="utilisateur-entreprises"),
     path("create_entreprise", EntrepriseCreateView.as_view(), name="utilisateur-entreprises"),

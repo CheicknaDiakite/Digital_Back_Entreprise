@@ -117,9 +117,6 @@ SIMPLE_JWT = {
 # ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "http://localhost:4173",
-    "http://localhost",           # Pour Capacitor en émulateur
-    "capacitor://localhost",      # Pour Capacitor sur mobile
     "https://test.diakitedigital.com",
     "https://www.test.diakitedigital.com",
 ]

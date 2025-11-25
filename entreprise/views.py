@@ -1,10 +1,14 @@
 import json
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from itertools import chain
 
+import qrcode
+from PIL import ImageFont, ImageDraw
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.db.models import Sum, Q, Count, F, Func, IntegerField
 from django.db.models.functions import TruncWeek, TruncMonth
 from django.http import JsonResponse, HttpResponse
@@ -12,7 +16,7 @@ from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import status
+from rest_framework import status, viewsets, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -29,7 +33,7 @@ from utilisateur.models import Utilisateur, Licence
 from root.code_paiement import entreprise_order_id_len
 
 from root.outil import get_order_id, verifier_numero, paiement_orange, paiement_moov, sama_pay, stripe_pay, \
-    verifier_status
+    verifier_status, regenerate_qrcode
 from .serializers import CategorieSerializer, EntrepriseSerializer, ClientSerializer, DepenseSerializer, \
     EntrerSerializer, SortieSerializer
 
@@ -2470,135 +2474,236 @@ class AddEntrerView(APIView):
     def post(self, request):
         data = request.data
 
-        qte = data.get("qte")
+        # Validation basique
+        qte = int(data.get("qte", 0))
         pu = data.get("pu")
         pu_achat = data.get("pu_achat")
         libelle = data.get("libelle")
         date = data.get("date")
-
-        cumuler_quantite = data.get("cumuler_quantite")
-        is_sortie = data.get("is_sortie")
-        is_prix = data.get("is_prix")
-
+        cumuler_quantite = data.get("cumuler_quantite", False)
+        is_sortie = data.get("is_sortie", True)
+        is_prix = data.get("is_prix", True)
         client_id = data.get("client_id")
         categorie_slug = data.get("categorie_slug")
-        user_id = data.get("user_id")
 
-        # Vérification utilisateur
-        admin = request.user
-        if not admin:
-            return Response({"etat": False, "message": "Utilisateur introuvable"}, status=status.HTTP_400_BAD_REQUEST)
+        user = request.user
 
-        if not (admin.groups.filter(name="Admin").exists() or admin.groups.filter(name="Editor").exists()):
-            return Response({"etat": False, "message": "Permission refusée"}, status=status.HTTP_403_FORBIDDEN)
+        # Vérification permissions
+        if not user.is_authenticated:
+            return Response({"etat": False, "message": "Non authentifié"}, status=400)
 
-        # Vérification catégorie
+        if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
+            return Response({"etat": False, "message": "Permission refusée"}, status=403)
+
+        # Récupération catégorie
         categorie = SousCategorie.objects.filter(uuid=categorie_slug).first()
         if not categorie:
-            return Response({"etat": False, "message": "Nom de produit non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"etat": False, "message": "Catégorie introuvable"}, status=400)
 
-        # Création de l'objet
-        entrer = Entrer(
+        # Récupération client
+        client = None
+        if client_id:
+            client = Client.objects.filter(uuid=client_id).first()
+            if not client:
+                return Response({"etat": False, "message": "Client introuvable"}, status=400)
+
+        # -----------------------------
+        # 🔥 Logique de cumul déplacée ici
+        # -----------------------------
+
+        dernier = Entrer.objects.filter(souscategorie=categorie).order_by("-created_at").first()
+
+        # Si on cumule → on modifie l'ancien produit
+        if cumuler_quantite and dernier:
+            # Client différent → reset
+            if dernier.client != client:
+                dernier.client = None
+
+            dernier.qte += qte
+            dernier.pu = pu
+            dernier.date = date
+            dernier.ref = data.get("ref") or dernier.generate_unique_code()
+            dernier.save()
+
+            # Création historique
+            HistoriqueEntrer.objects.create(
+                entrer=dernier,
+                ref=dernier.ref,
+                libelle=f"Produit modifié par {user.first_name} {user.last_name}",
+                categorie=categorie.libelle,
+                qte=qte,
+                pu=pu,
+                date=date,
+                action="updated",
+                reference=dernier.generate_unique_code()
+            )
+
+            return Response({"etat": True, "message": "Quantité cumulée", "id": dernier.id})
+
+        # -----------------------------
+        # 🔥 Sinon on crée un nouveau produit
+        # -----------------------------
+
+        entrer = Entrer.objects.create(
+            souscategorie=categorie,
             qte=qte,
             pu=pu,
             pu_achat=pu_achat,
             libelle=libelle,
             date=date,
-            cumuler_quantite=cumuler_quantite,
             is_sortie=is_sortie,
             is_prix=is_prix,
-            souscategorie=categorie
+            client=client,
         )
 
-        # Vérification client
-        if client_id:
-            client = Client.objects.filter(uuid=client_id).first()
-            if not client:
-                return Response({"etat": False, "message": "Client non trouvé"}, status=status.HTTP_400_BAD_REQUEST)
-            entrer.client = client
+        # Génération ref si absent
+        entrer.ref = entrer.ref or entrer.generate_unique_code()
+        entrer.save()
 
-        # Sauvegarde avec l’utilisateur (si ton modèle supporte save(user=...))
-        user = request.user if request.user.is_authenticated else None
-        if user:
-            entrer.save(user=user)
-        else:
-            entrer.save()
+        # Génération Qrcode
+        try:
+            self.generate_qrcode(entrer)
+        except:
+            pass  # éviter crash si la police n'est pas trouvée
+
+        # Historique création
+        HistoriqueEntrer.objects.create(
+            entrer=entrer,
+            ref=entrer.ref,
+            libelle=f"Produit ajouté par {user.first_name} {user.last_name}",
+            categorie=f"{categorie.libelle} ({entrer.libelle})",
+            qte=qte,
+            pu=pu,
+            date=date,
+            action="created"
+        )
 
         return Response({
             "etat": True,
             "id": entrer.id,
             "slug": entrer.slug,
-            "message": "success"
-        }, status=status.HTTP_201_CREATED)
+            "message": "Produit créé"
+        }, status=201)
+
+    # -----------------------------
+    # 🔥 Fonction QR code sortie du modèle
+    # -----------------------------
+    def generate_qrcode(self, entrer):
+        ref = str(entrer.ref)
+
+        qr = qrcode.QRCode(
+            version=1,
+            box_size=10,
+            border=4,
+            error_correction=qrcode.constants.ERROR_CORRECT_L
+        )
+
+        qr.add_data(ref)
+        qr.make(fit=True)
+        img_qr = qr.make_image().convert("RGB")
+
+        # Police
+        try:
+            font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 20)
+        except:
+            font = ImageFont.load_default()
+
+        draw = ImageDraw.Draw(img_qr)
+        buffer = BytesIO()
+        img_qr.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        entrer.barcode.save(f"{ref}.png", File(buffer), save=True)
+
+
+class EntrerViewSet(viewsets.ModelViewSet):
+    queryset = Entrer.objects.all().order_by('-created_at')
+    serializer_class = EntrerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+
+        # Enregistrer dans l'historique AVANT la suppression
+        HistoriqueEntrer.objects.create(
+            entrer=instance,
+            ref=instance.ref,
+            libelle=f"Produit supprimé par {user.first_name} {user.last_name}" if user else "Produit supprimé",
+            categorie=instance.souscategorie.libelle,
+            qte=instance.qte,
+            pu=instance.pu,
+            date=instance.date,
+            action="deleted",
+            reference=instance.generate_unique_code(),  # code unique
+        )
+
+        # Puis supprimer définitivement
+        instance.delete()
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def del_entre(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+    data = request.data
+    user = request.user  # Utilisateur authentifié
 
-    if request.method == "POST":
-        try:
+    # Vérification permissions
+    if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
+        return JsonResponse({"etat": False, "message": "Permission refusée"}, status=403)
 
-            form = json.loads(request.body.decode("utf-8"))
+    uuid = data.get("uuid")
+    slug = data.get("slug")
+    entreprise_id = data.get("entreprise_id")
 
-            id = form.get("uuid")
-            slug = form.get("slug")
-            user_id = form.get("user_id")
-            entreprise_id = form.get("entreprise_id")
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
+    if not (uuid or slug):
+        return JsonResponse({"etat": False, "message": "uuid ou slug manquant"}, status=400)
 
-        user = Utilisateur.objects.filter(uuid=user_id).first()
+    # Récupération de l'objet
+    entrer = Entrer.objects.filter(uuid=uuid).first() if uuid else Entrer.objects.filter(slug=slug).first()
+    if not entrer:
+        return JsonResponse({"etat": False, "message": "Produit introuvable"}, status=404)
 
-        if user:
+    # Vérification entreprise si fournie
+    entreprise = None
+    if entreprise_id:
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
 
-            if (user.groups.filter(name="Admin").exists()
-                    or user.groups.filter(name="Editor").exists()
-            ):
-                if id or slug:
-                    if id:
-                        livre_from_database = Entrer.objects.filter(uuid=id).first()
-                        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
-                    else:
-                        livre_from_database = Entrer.objects.filter(slug=slug).first()
+    # Empêcher la suppression si des sorties existent
+    if entrer.all_sortie.exists():
+        return JsonResponse({
+            "etat": False,
+            "message": "Impossible de supprimer : des sorties/ventes existent pour cet article."
+        }, status=400)
 
-                    if not livre_from_database:
-                        response_data["message"] = "Catégorie non trouvée"
-                    else:
-                        if len(livre_from_database.all_sortie) > 0:
-                            response_data[
-                                "message"] = f"cet enregistrement possède des sorties ou ventes"
-                        else:
-                            ref_entrer = livre_from_database.ref  # Référence de l'entrer
-                            qte = livre_from_database.qte
-                            pu = livre_from_database.pu
-                            dateT = datetime.now()
-                            user = request.user
+    # Sauvegarde des données avant suppression
+    ref_entrer = entrer.ref
+    qte = entrer.qte
+    pu = entrer.pu
+    categorie_txt = f"{entrer.souscategorie.libelle} ({entrer.libelle})"
 
-                            # Ajouter une entrée dans l'historique avant la suppression
-                            HistoriqueEntrer.objects.create(
-                                entreprise=entreprise,
-                                ref=ref_entrer,
-                                libelle=f"Produit supprimer par {user.first_name} {user.last_name}" if user else "Produit supprimer",
-                                categorie=f"{livre_from_database.souscategorie.libelle} ({livre_from_database.libelle})",
-                                qte=qte,
-                                pu=pu,
-                                date=dateT,
-                                action='deleted',  # Indique que la quantité a été mise à jour
-                                utilisateur=user  # Assumer que l'utilisateur est récupéré via token
-                            )
-                            livre_from_database.delete()
-                            response_data["etat"] = True
-                            response_data["message"] = "Success"
-                else:
-                    response_data["message"] = "ID ou slug de la catégorie manquant"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission de supprimer une souscatégorie."
-        else:
-            response_data["message"] = "Utilisateur non trouvé."
-    return JsonResponse(response_data)
+    # Ajout à l'historique
+    HistoriqueEntrer.objects.create(
+        entreprise=entreprise,
+        entrer=entrer,
+        ref=ref_entrer,
+        libelle=f"Produit supprimé par {user.first_name} {user.last_name}",
+        categorie=categorie_txt,
+        qte=qte,
+        pu=pu,
+        action="deleted",
+        utilisateur=user
+    )
+
+    # Suppression
+    entrer.delete()
+
+    return JsonResponse({"etat": True, "message": "Suppression réussie"})
 
 
 @api_view(["POST"])
@@ -2683,72 +2788,64 @@ def get_entre(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def set_entre(request):
-    response_data = {'message': "Requete invalide", 'etat': False}
+    data = request.data
 
-    if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
+    user = request.user
 
-        user_id = form.get("user_id")
-        user = request.user
-        if user:
-            # Vérification des permissions de l'utilisateur
-            if user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists():
-                # if user.has_perm('boutique.change_souscategorie'):
-                slug = form.get("slug")
-                identifiant = form.get("uuid")
-                if not (identifiant or slug):
-                    return JsonResponse({'message': "ID ou slug de livre manquant", 'etat': False})
+    # Vérification permissions
+    if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
+        return JsonResponse({"etat": False, "message": "Permission refusée"}, status=403)
 
-                livre_from_database = None
-                if identifiant:
-                    livre_from_database = Entrer.objects.filter(uuid=identifiant).first()
-                else:
-                    livre_from_database = Entrer.objects.filter(slug=slug).first()
+    uuid = data.get("uuid")
+    slug = data.get("slug")
 
-                if livre_from_database:
+    if not (uuid or slug):
+        return JsonResponse({"etat": False, "message": "uuid ou slug manquant"}, status=400)
 
-                    modifier = False
-                    if "qte" in form:
-                        livre_from_database.qte = form["qte"]
-                        modifier = True
+    # Récupération de l'entrée
+    entrer = Entrer.objects.filter(uuid=uuid).first() if uuid else Entrer.objects.filter(slug=slug).first()
+    if not entrer:
+        return JsonResponse({"etat": False, "message": "Produit introuvable"}, status=404)
 
-                    if "pu" in form:
-                        livre_from_database.pu = form["pu"]
-                        livre_from_database.save(user=user)
-                        modifier = True
+    # ---- Tracking des modifications ----
+    fields_changed = {}
+    allowed_fields = ["qte", "pu", "pu_achat", "is_sortie", "is_prix", "libelle"]
 
-                    if "pu_achat" in form:
-                        livre_from_database.pu_achat = form["pu_achat"]
-                        modifier = True
+    for field in allowed_fields:
+        if field in data:
+            old_val = getattr(entrer, field)
+            new_val = data[field]
 
-                    if "is_sortie" in form:
-                        livre_from_database.is_sortie = form["is_sortie"]
-                        modifier = True
+            if str(old_val) != str(new_val):  # comparer sur string pour décimaux/int
+                fields_changed[field] = {"ancien": old_val, "nouveau": new_val}
+                setattr(entrer, field, new_val)
 
-                    if "is_prix" in form:
-                        livre_from_database.is_prix = form["is_prix"]
-                        modifier = True
+    if not fields_changed:
+        return JsonResponse({"etat": False, "message": "Aucune modification détectée"}, status=200)
 
-                    if "libelle" in form:
-                        livre_from_database.libelle = form["libelle"]
-                        modifier = True
+    # Sauvegarde
+    entrer.save()
 
-                    if modifier:
-                        livre_from_database.save(user=user)
-                        response_data["etat"] = True
-                        response_data["message"] = "Success"
+    # ---- Historique ----
+    HistoriqueEntrer.objects.create(
+        entrer=entrer,
+        ref=entrer.ref,
+        libelle=f"Produit modifié par {user.first_name} {user.last_name}",
+        categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
+        qte=data.get("qte", entrer.qte),
+        pu=data.get("pu", entrer.pu),
+        action="updated"
+    )
 
-                else:
-                    return JsonResponse({'message': "Inventaire non trouvee", 'etat': False})
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission de modifier les souscatégorie."
-        else:
-            response_data["message"] = "Utilisateur non trouvé."
-    return JsonResponse(response_data)
+    # ---- Regénération du QR code si le prix ou ref change ----
+    if "pu" in fields_changed or "ref" in fields_changed:
+        regenerate_qrcode(entrer)
+
+    return JsonResponse({
+        "etat": True,
+        "message": "Modification effectuée",
+        "changes": fields_changed
+    })
 
 
 # @csrf_exempt

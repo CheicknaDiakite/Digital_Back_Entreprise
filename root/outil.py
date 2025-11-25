@@ -3,8 +3,11 @@ import json
 import random
 import time
 import string
+from io import BytesIO
 
+import qrcode
 import requests
+from django.core.files import File
 from django.core.files.base import ContentFile
 from django.urls import reverse
 
@@ -160,3 +163,24 @@ def get_solde():
             return False
     except:
         return False
+
+
+def regenerate_qrcode(entrer):
+    ref = str(entrer.ref)
+
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_L
+    )
+
+    qr.add_data(ref)
+    qr.make(fit=True)
+    img = qr.make_image().convert("RGB")
+
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    entrer.barcode.save(f"{ref}.png", File(buffer), save=True)
