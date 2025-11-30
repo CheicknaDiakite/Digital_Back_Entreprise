@@ -303,6 +303,10 @@ class HistoriqueEntrer(models.Model):
     entrer = models.ForeignKey(Entrer, on_delete=models.SET_NULL, null=True, blank=True)
     ref = models.CharField(max_length=150)
     qte = models.IntegerField()
+
+    ancien_qte = models.IntegerField(null=True, blank=True)
+    cumuler_qe = models.BooleanField(default=False, null=True, blank=True)
+
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     reference = models.CharField(max_length=150, unique=True, null=False, blank=False)
     date = models.DateTimeField(null=True, blank=True)

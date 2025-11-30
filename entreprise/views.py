@@ -2519,11 +2519,11 @@ class AddEntrerView(APIView):
             if dernier.client != client:
                 dernier.client = None
 
+            ancien_qte = dernier.qte
             dernier.qte += qte
             dernier.pu = pu
             dernier.date = date
             dernier.ref = data.get("ref") or dernier.generate_unique_code()
-            dernier.save()
 
             # Création historique
             HistoriqueEntrer.objects.create(
@@ -2532,11 +2532,14 @@ class AddEntrerView(APIView):
                 libelle=f"Produit modifié par {user.first_name} {user.last_name}",
                 categorie=categorie.libelle,
                 qte=qte,
+                ancien_qte=ancien_qte,
+                cumuler_qe=cumuler_quantite,
                 pu=pu,
                 date=date,
                 action="updated",
                 reference=dernier.generate_unique_code()
             )
+            dernier.save()
 
             return Response({"etat": True, "message": "Quantité cumulée", "id": dernier.id})
 
@@ -2818,10 +2821,8 @@ def get_entre(request):
 @permission_classes([IsAuthenticated])
 def set_entre(request):
     data = request.data
-
     user = request.user
 
-    # Vérification permissions
     if not (user.groups.filter(name="Admin").exists() or user.groups.filter(name="Editor").exists()):
         return JsonResponse({"etat": False, "message": "Permission refusée"}, status=403)
 
@@ -2831,7 +2832,6 @@ def set_entre(request):
     if not (uuid or slug):
         return JsonResponse({"etat": False, "message": "uuid ou slug manquant"}, status=400)
 
-    # Récupération de l'entrée
     entrer = Entrer.objects.filter(uuid=uuid).first() if uuid else Entrer.objects.filter(slug=slug).first()
     if not entrer:
         return JsonResponse({"etat": False, "message": "Produit introuvable"}, status=404)
@@ -2845,14 +2845,18 @@ def set_entre(request):
             old_val = getattr(entrer, field)
             new_val = data[field]
 
-            if str(old_val) != str(new_val):  # comparer sur string pour décimaux/int
+            if str(old_val) != str(new_val):
                 fields_changed[field] = {"ancien": old_val, "nouveau": new_val}
+
+                # Capture ancien_qte si qte change
+                if field == "qte":
+                    ancien_qte = old_val
+
                 setattr(entrer, field, new_val)
 
     if not fields_changed:
         return JsonResponse({"etat": False, "message": "Aucune modification détectée"}, status=200)
 
-    # Sauvegarde
     entrer.save()
 
     # ---- Historique ----
@@ -2862,11 +2866,11 @@ def set_entre(request):
         libelle=f"Produit modifié par {user.first_name} {user.last_name}",
         categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
         qte=data.get("qte", entrer.qte),
+        ancien_qte=fields_changed["qte"]["ancien"] if "qte" in fields_changed else None,
         pu=data.get("pu", entrer.pu),
         action="updated"
     )
 
-    # ---- Regénération du QR code si le prix ou ref change ----
     if "pu" in fields_changed or "ref" in fields_changed:
         regenerate_qrcode(entrer)
 
@@ -4150,6 +4154,7 @@ class UtilisateurEntrepriseHistoriqueView(APIView):
                             "ref": historique.entrer.ref,
                             "action": historique.action,
                             "qte": historique.qte,
+                            "ancien_qte": historique.ancien_qte,
                             "pu": historique.pu,
                             "libelle": historique.libelle,
                             "categorie": historique.categorie,
