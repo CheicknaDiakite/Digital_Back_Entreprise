@@ -2866,6 +2866,7 @@ def set_entre(request):
         libelle=f"Produit modifié par {user.first_name} {user.last_name}",
         categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
         qte=data.get("qte", entrer.qte),
+        description=data.get("description"),
         ancien_qte=fields_changed["qte"]["ancien"] if "qte" in fields_changed else None,
         pu=data.get("pu", entrer.pu),
         action="updated"
@@ -4155,6 +4156,8 @@ class UtilisateurEntrepriseHistoriqueView(APIView):
                             "action": historique.action,
                             "qte": historique.qte,
                             "ancien_qte": historique.ancien_qte,
+                            "cumuler_qe": historique.cumuler_qe,
+                            "description": historique.description,
                             "pu": historique.pu,
                             "libelle": historique.libelle,
                             "categorie": historique.categorie,

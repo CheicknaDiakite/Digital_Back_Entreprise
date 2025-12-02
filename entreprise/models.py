@@ -307,6 +307,8 @@ class HistoriqueEntrer(models.Model):
     ancien_qte = models.IntegerField(null=True, blank=True)
     cumuler_qe = models.BooleanField(default=False, null=True, blank=True)
 
+    description = models.TextField(blank=True, null=True)
+
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     reference = models.CharField(max_length=150, unique=True, null=False, blank=False)
     date = models.DateTimeField(null=True, blank=True)
