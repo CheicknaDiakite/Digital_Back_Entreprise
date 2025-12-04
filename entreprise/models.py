@@ -388,42 +388,20 @@ class Sortie(models.Model):
             num += 1
         return unique_slug
 
-    def save(self, *args, user=None, **kwargs):
-        # Si la quantité de l'inventaire après soustraction est 0 ou moins, lever une erreur
-        if self.prix_stock < 0:
-            raise ValidationError(
-                "Impossible de faire la sortie : la quantité est demander n'est pas disponible !"
-            )
+    def save(self, *args, **kwargs):
+        # Vérifier stock
+        if self.entrer.qte - int(self.qte) < 0:
+            raise ValidationError("Impossible : quantité demandée indisponible.")
 
-        # Générer un slug unique s'il n'existe pas
+        # Générer slug si besoin
         if not self.slug:
             self.slug = self._get_unique_slug()
 
-        # Générer une référence unique s'il n'y en a pas
+        # Générer ref si besoin
         if not self.ref:
             self.ref = self.generate_unique_code()
 
-        # Sauvegarde initiale du stock
-        super(Sortie, self).save(*args, **kwargs)
-
-        # Mise à jour correcte de la quantité de l'inventaire après l'ajout du stock
-        self.entrer.qte -= int(self.qte)
-        self.entrer.save()
-
-        # Crée un historique après la mise à jour du stock
-        HistoriqueSortie.objects.create(
-            sortie=self,
-            ref=self.ref,
-            # libelle=self.entrer.libelle,
-            libelle=f"Produit sortie par {user.first_name} {user.last_name}" if user else "Produit sortie",
-            # categorie=self.entrer.souscategorie.libelle,
-            categorie=f"{self.entrer.souscategorie.libelle} ({self.entrer.libelle})",
-            qte=self.qte,
-            pu=self.pu,
-            action="created"
-            # Vérifie si c'est un nouvel enregistrement ou une mise à jour
-        )
-
+        super().save(*args, **kwargs)
     def generate_unique_code(self):
         date_str = datetime.datetime.now().strftime("%m%d")
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))

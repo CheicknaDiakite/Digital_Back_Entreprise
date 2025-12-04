@@ -3166,40 +3166,67 @@ class SortieCreateView(APIView):
 
         qte = data.get("qte")
         pu = data.get("pu")
-        admin_id = data.get("user_id")
+        admin = request.user
         entrer_id = data.get("entre_id")
         client_id = data.get("client_id")
 
-        # Vérif admin
-        admin = request.user
-        if not admin:
-            return Response({'etat': False, 'message': "Admin non trouvé"}, status=status.HTTP_404_NOT_FOUND)
-
-        if not (admin.groups.filter(name__in=["Admin", "Editor", "Author"]).exists()):
-            return Response({'etat': False, 'message': "Vous n'avez pas la permission"},
+        # Vérification admin
+        if not admin or not admin.groups.filter(name__in=["Admin", "Editor", "Author"]).exists():
+            return Response({'etat': False, 'message': "Permission refusée"},
                             status=status.HTTP_403_FORBIDDEN)
 
-        # Vérif entrée
+        # Vérification entrée
         entrer = Entrer.objects.filter(uuid=entrer_id).first()
         if not entrer:
-            return Response({'etat': False, 'message': "Entrée non trouvée"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'etat': False, 'message': "Entrée non trouvée"},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Vérification stock
+        if entrer.qte - int(qte) < 0:
+            return Response({'etat': False, 'message': "Stock insuffisant"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # Création sortie
-        sortie = Sortie(qte=qte, pu=pu, entrer=entrer, created_by=admin)
+        sortie = Sortie(
+            qte=qte,
+            pu=pu,
+            entrer=entrer,
+            created_by=admin
+        )
 
-        # Vérif client (optionnel)
+        # Client (optionnel)
         if client_id:
             try:
                 client_uuid = uuid.UUID(client_id)
             except ValueError:
-                return Response({'etat': False, 'message': "Client non valide"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'etat': False, 'message': "Client non valide"},
+                                status=status.HTTP_400_BAD_REQUEST)
 
             client = Client.objects.filter(uuid=client_uuid).first()
             if not client:
-                return Response({'etat': False, 'message': "Client non trouvé"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'etat': False, 'message': "Client non trouvé"},
+                                status=status.HTTP_404_NOT_FOUND)
             sortie.client = client
 
-        sortie.save(user=request.user)
+        # Enregistrer la sortie
+        sortie.save()
+
+        # 🔥 Mise à jour stock
+        entrer.qte -= int(qte)
+        entrer.save()
+
+        # 🔥 Enregistrer HistoriqueSortie
+        HistoriqueSortie.objects.create(
+            sortie=sortie,
+            ref=sortie.ref,
+            qte=sortie.qte,
+            pu=sortie.pu,
+            action="created",
+            libelle=f"Produit sorti par {admin.first_name} {admin.last_name}",
+            categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
+            utilisateur=admin,
+            entreprise=admin.entreprise if hasattr(admin, "entreprise") else None
+        )
 
         serializer = SortieSerializer(sortie)
         return Response({
@@ -3385,60 +3412,96 @@ def del_sortie(request):
     if request.method == "POST":
         try:
             form = json.loads(request.body.decode("utf-8"))
-
         except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des donnees JSON", 'etat': False})
+            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
 
-        id = form.get("uuid")
-        slug = form.get("slug")
+        sortie_id = form.get("uuid")
+        action_type = form.get("action")  # "cancel" ou "delete"
         user_id = form.get("user_id")
         entreprise_id = form.get("entreprise_id")
+
         user = Utilisateur.objects.filter(uuid=user_id).first()
 
-        if user:
-            # if user.has_perm('entreprise.delete_entrer'):
-            if (user.groups.filter(name="Admin").exists()
-                    or user.groups.filter(name="Editor").exists()
-            ):
-                if id or slug:
-                    if id:
-                        livre_from_database = Sortie.objects.filter(uuid=id).first()
-                        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
-                    else:
-                        livre_from_database = Sortie.objects.filter(slug=slug).first()
+        if not user:
+            return JsonResponse({"etat": False, "message": "Utilisateur non trouvé."})
 
-                    if not livre_from_database:
-                        response_data["message"] = "Stock non trouvée"
-                    else:
-                        ref_entrer = livre_from_database.ref  # Référence de l'entrer
-                        qte = livre_from_database.qte
-                        pu = livre_from_database.pu
-                        user = request.user
-                        libelle = livre_from_database.entrer.libelle
-                        categorie = livre_from_database.entrer.souscategorie.libelle
+        # Permissions
+        if not (user.groups.filter(name__in=["Admin", "Editor"]).exists()):
+            return JsonResponse({"etat": False, "message": "Vous n'avez pas la permission."})
 
-                        # Ajouter une entrée dans l'historique avant la suppression
-                        HistoriqueSortie.objects.create(
-                            ref=ref_entrer,
-                            entreprise=entreprise,
-                            action='deleted',
-                            # categorie=categorie,
-                            libelle=f"Produit supprimer par {user.first_name} {user.last_name}" if user else "Produit supprimer",
-                            categorie=f"{categorie} ({libelle})",
-                            qte=qte,
-                            pu=pu,
-                            utilisateur=request.user  # Assumer que l'utilisateur est récupéré via token
-                        )
-                        livre_from_database.delete()
-                        response_data["etat"] = True
-                        response_data["message"] = "Success"
-                else:
-                    response_data["message"] = "ID ou slug de la catégorie manquant"
-            else:
-                # L'utilisateur n'a pas la permission d'ajouter une catégorie
-                response_data["message"] = "Vous n'avez pas la permission de supprimer une souscatégorie."
+        # Vérif sortie
+        sortie = Sortie.objects.filter(uuid=sortie_id).first()
+        if not sortie:
+            return JsonResponse({"etat": False, "message": "Sortie non trouvée."})
+
+        entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
+
+        # Données historiques
+        ref = sortie.ref
+        qte = sortie.qte
+        pu = sortie.pu
+        entrer = sortie.entrer
+        libelle = entrer.libelle
+        categorie = entrer.souscategorie.libelle
+        utilisateur = request.user
+
+        # -----------------------------
+        # 🔥 1. ANNULATION (on remet la quantité)
+        # -----------------------------
+        if action_type == "cancel":
+
+            # On remet la quantité initiale
+            entrer.qte += int(qte)
+            entrer.save()
+
+            # Historique
+            HistoriqueSortie.objects.create(
+                ref=ref,
+                entreprise=entreprise,
+                action="annuller",
+                categorie=f"{categorie} ({libelle})",
+                libelle=f"Sortie annulée par {utilisateur.first_name} {utilisateur.last_name}",
+                qte=qte,
+                pu=pu,
+                utilisateur=utilisateur,
+                sortie=sortie
+            )
+
+            # Suppression réelle
+            sortie.delete()
+
+            response_data["etat"] = True
+            response_data["message"] = "Sortie annulée avec succès"
+            return JsonResponse(response_data)
+
+        # -----------------------------
+        # 🔥 2. SUPPRESSION DÉFINITIVE
+        # -----------------------------
+        elif action_type == "delete":
+
+            # Historique
+            HistoriqueSortie.objects.create(
+                ref=ref,
+                entreprise=entreprise,
+                action="deleted",
+                categorie=f"{categorie} ({libelle})",
+                libelle=f"Produit supprimé par {utilisateur.first_name} {utilisateur.last_name}",
+                qte=qte,
+                pu=pu,
+                utilisateur=utilisateur,
+                sortie=sortie
+            )
+
+            # Suppression réelle
+            sortie.delete()
+
+            response_data["etat"] = True
+            response_data["message"] = "Sortie supprimée définitivement"
+            return JsonResponse(response_data)
+
         else:
-            response_data["message"] = "Utilisateur non trouvé."
+            return JsonResponse({"etat": False, "message": "Action invalide (cancel/delete attendu)"})
+
     return JsonResponse(response_data)
 
 
