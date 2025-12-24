@@ -248,6 +248,7 @@ class Entrer(models.Model):
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
     libelle = models.CharField(max_length=200, null=False)
     qte = models.IntegerField(default=0)
+    qte_critique = models.IntegerField(default=0, null=False, blank=False)
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     pu_achat = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=False, blank=False)
     # Champ booléen pour déterminer si on doit cumuler ou non la quantité
@@ -417,6 +418,9 @@ class HistoriqueSortie(models.Model):
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
     libelle = models.CharField(max_length=150, null=True, blank=True)
     categorie = models.CharField(max_length=150, null=True, blank=True)
+
+    description = models.TextField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.SET_NULL, null=True, blank=True)

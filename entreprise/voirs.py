@@ -177,6 +177,7 @@ class EntresEntrepriseAPIView(APIView):
                         "ref": entrer.ref,
                         "client": entrer.client.nom if entrer.client else None,
                         "qte": entrer.qte,
+                        "qte_critique": entrer.qte_critique,
                         "is_sortie": entrer.is_sortie,
                         "is_prix": entrer.is_prix,
                         "price": entrer.prix_total,

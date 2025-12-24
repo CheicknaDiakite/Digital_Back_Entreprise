@@ -2476,6 +2476,7 @@ class AddEntrerView(APIView):
 
         # Validation basique
         qte = int(data.get("qte", 0))
+        qte_critique = int(data.get("qte_critique", 0))
         pu = data.get("pu")
         pu_achat = data.get("pu_achat")
         libelle = data.get("libelle")
@@ -2550,6 +2551,7 @@ class AddEntrerView(APIView):
         entrer = Entrer.objects.create(
             souscategorie=categorie,
             qte=qte,
+            qte_critique=qte_critique,
             pu=pu,
             pu_achat=pu_achat,
             libelle=libelle,
@@ -2838,7 +2840,7 @@ def set_entre(request):
 
     # ---- Tracking des modifications ----
     fields_changed = {}
-    allowed_fields = ["qte", "pu", "pu_achat", "is_sortie", "is_prix", "libelle"]
+    allowed_fields = ["qte", "qte_critique", "pu", "pu_achat", "is_sortie", "is_prix", "libelle"]
 
     for field in allowed_fields:
         if field in data:
@@ -2979,6 +2981,7 @@ def get_entre_un(request, uuid):
             "is_sortie": livre.is_sortie,
             "is_prix": livre.is_prix,
             "qte": livre.qte,
+            "qte_critique": livre.qte_critique,
             "image": livre.souscategorie.image.url if livre.souscategorie.image else None,
             "categorie_slug": livre.souscategorie.libelle,
         }
@@ -3419,6 +3422,7 @@ def del_sortie(request):
         action_type = form.get("action")  # "cancel" ou "delete"
         user_id = form.get("user_id")
         entreprise_id = form.get("entreprise_id")
+        description = form.get("description")
 
         user = Utilisateur.objects.filter(uuid=user_id).first()
 
@@ -3462,6 +3466,7 @@ def del_sortie(request):
                 categorie=f"{categorie} ({libelle})",
                 libelle=f"Sortie annulée par {utilisateur.first_name} {utilisateur.last_name}",
                 qte=qte,
+                description=description,
                 pu=pu,
                 utilisateur=utilisateur,
                 sortie=sortie
@@ -3488,6 +3493,7 @@ def del_sortie(request):
                 libelle=f"Produit supprimé par {utilisateur.first_name} {utilisateur.last_name}",
                 qte=qte,
                 pu=pu,
+                description=description,
                 utilisateur=utilisateur,
                 sortie=sortie
             )
@@ -4299,6 +4305,7 @@ class UtilisateurEntrepriseHistoriqueSuppView(APIView):
                         "qte": historique.qte,
                         "pu": historique.pu,
                         "libelle": historique.libelle,
+                        "description": historique.description,
                         "categorie": historique.categorie,
                         "date": historique.created_at,
                     }
@@ -4310,6 +4317,7 @@ class UtilisateurEntrepriseHistoriqueSuppView(APIView):
                         "qte": historique.qte,
                         "pu": historique.pu,
                         "libelle": historique.libelle,
+                        "description": historique.description,
                         "categorie": historique.categorie,
                         "date": historique.created_at,
                     }
