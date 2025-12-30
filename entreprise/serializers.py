@@ -36,7 +36,7 @@ class EntrepriseSerializer(serializers.ModelSerializer):
 
         # Calcul de la date d’expiration de la licence
         if type_licence == 1:
-            date_expiration = datetime.now().date() + timedelta(days=30)
+            date_expiration = datetime.now().date() + timedelta(days=7)
         elif type_licence == 2:
             date_expiration = datetime.now().date() + timedelta(days=180)
         elif type_licence == 3:

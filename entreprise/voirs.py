@@ -297,7 +297,7 @@ class SommeQtePuSortieView(APIView):
             details_entrer_par_mois = {}
             for item in entrers.annotate(month=TruncMonth('created_at')).values('month').annotate(
                 somme_qte=Sum('qte'),
-                somme_prix_total=Sum('pu')
+                somme_prix_total=Sum('pu_achat')
             ).order_by('month'):
                 mois = item['month'].strftime("%B %Y")
                 details_entrer_par_mois[mois] = {

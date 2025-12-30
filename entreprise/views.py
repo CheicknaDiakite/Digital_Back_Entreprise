@@ -2478,7 +2478,7 @@ class AddEntrerView(APIView):
         qte = int(data.get("qte", 0))
         qte_critique = int(data.get("qte_critique", 0))
         pu = data.get("pu")
-        pu_achat = data.get("pu_achat")
+        pu_achat = data.get("pu_achat", 0)
         libelle = data.get("libelle")
         date = data.get("date")
         cumuler_quantite = data.get("cumuler_quantite", False)

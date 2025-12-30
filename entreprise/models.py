@@ -258,7 +258,7 @@ class Entrer(models.Model):
 
     slug = models.SlugField(editable=False, blank=True)
 
-    date = models.DateTimeField(null=True, blank=True)
+    date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
@@ -277,7 +277,7 @@ class Entrer(models.Model):
 
     @property
     def prix_total(self):
-        return self.pu * self.qte
+        return self.pu_achat * self.qte
 
     def _get_unique_slug(self):
         slug = slugify(self.pu)
@@ -312,7 +312,7 @@ class HistoriqueEntrer(models.Model):
 
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     reference = models.CharField(max_length=150, unique=True, null=False, blank=False)
-    date = models.DateTimeField(null=True, blank=True)
+    date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
     libelle = models.CharField(max_length=150, null=True, blank=True)  # "created", "updated", "deleted"
     categorie = models.CharField(max_length=150, null=True, blank=True)
