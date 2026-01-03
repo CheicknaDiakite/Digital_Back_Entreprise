@@ -1,7 +1,7 @@
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from django.contrib.auth import authenticate, get_user_model
-from .models import Utilisateur
+from .models import Utilisateur, RoleRestriction
 
 Utilisateur = get_user_model()
 
@@ -28,6 +28,7 @@ class UtilisateurSerializer(serializers.ModelSerializer):
 
     def get_avatar(self, obj):
         return obj.avatar.url if obj.avatar else None
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
@@ -104,3 +105,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data["username"] = user.username
         data["numero"] = user.numero
         return data
+
+
+class UserRestrictionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoleRestriction
+        fields = [
+            "active",
+            "day_start",
+            "day_end",
+            "hour_start",
+            "hour_end",
+        ]

@@ -3,7 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import api_user_login, api_user_register, deconnxion, api_user_get_profil, api_update_password, \
     api_user_set_profil, api_user_all, api_user_get, api_user_admin_register, del_user, api_forgot_password, \
-    update_password, api_mes_user_all, api_user_cabinet_register, UserAdminRegisterView
+    update_password, api_mes_user_all, api_user_cabinet_register, UserAdminRegisterView, user_restriction, user_restriction_detail
 from .voirs import CustomTokenObtainPairView, UserProfileView, AllUsersView, RegisterView, UserGetAPIView, UserUnView
 
 urlpatterns = [
@@ -20,6 +20,8 @@ urlpatterns = [
     path("admin/inscription", UserAdminRegisterView.as_view(), name="api_user_register"),
     path("admin/cabinet", api_user_cabinet_register, name="api_user_cabinet_register"),
     path("profile/set", api_user_set_profil, name="api_user_set_profil"),
+    path("api/user/restriction/", user_restriction),
+    path("api/user/restriction/<uuid:uuid>/", user_restriction_detail),
     path("profile/del", del_user, name="api_user_set_profil"),
     path("get/<uuid:uuid>", api_user_all, name="api_user_get"),
     path("get/mes_user/<uuid:uuid>", api_mes_user_all, name="api_mes_user_all"),

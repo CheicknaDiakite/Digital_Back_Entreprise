@@ -145,6 +145,18 @@ class Utilisateur(AbstractUser):
         pass
 
 
+class RoleRestriction(models.Model):
+    user = models.OneToOneField(Utilisateur, on_delete=models.CASCADE, related_name="restriction")
+    day_start = models.PositiveSmallIntegerField()  # 0 = lundi
+    day_end = models.PositiveSmallIntegerField()
+    hour_start = models.TimeField()
+    hour_end = models.TimeField()
+    active = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Restriction {self.user.username}"
+
+
 class Licence(models.Model):
     FREE = 1
     BASIC = 2

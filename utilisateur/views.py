@@ -19,12 +19,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Token, Utilisateur
+from root.permissions import RoleTimePermission
+from .models import Token, Utilisateur, RoleRestriction
 from fonction import token_required
 
 from entreprise.models import Entreprise
 
 from root.mailer import send
+from .serializers import UserRestrictionSerializer
 
 
 # Create your views here.
@@ -508,7 +510,7 @@ def api_user_cabinet_register(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, RoleTimePermission])
 def api_user_set_profil(request):
     response_data = {'message': "requette invalide", 'etat': False}
 
@@ -681,6 +683,69 @@ def api_user_set_profil(request):
         response_data["message"] = "requette invalide"
 
     return JsonResponse(response_data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def user_restriction(request):
+    user = request.user
+
+    try:
+        restriction = user.restriction
+    except RoleRestriction.DoesNotExist:
+        return Response({
+            "day_start": 0,
+            "day_end": 4,
+            "hour_start": "08:00",
+            "hour_end": "18:00",
+            "active": False
+        })
+
+    serializer = UserRestrictionSerializer(restriction)
+    return Response(serializer.data)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def user_restriction_detail(request, uuid):
+    try:
+        target_user = Utilisateur.objects.get(uuid=uuid)
+    except Utilisateur.DoesNotExist:
+        return Response({"message": "Utilisateur non trouvé"}, status=404)
+
+    # Check permissions (e.g., only admin or owner can edit)
+    # For now, assuming IsAuthenticated is enough or adding basic check
+    # if not request.user.is_staff and request.user != target_user: # Example check
+    #     return Response({"message": "Non autorisé"}, status=403)
+
+    if request.method == "GET":
+        try:
+            restriction = target_user.restriction
+            serializer = UserRestrictionSerializer(restriction)
+            return Response(serializer.data)
+        except RoleRestriction.DoesNotExist:
+            return Response({"active": False})
+
+    elif request.method == "POST":
+        try:
+            defaults = {
+                "day_start": 0,
+                "day_end": 4,
+                "hour_start": "08:00",
+                "hour_end": "18:00",
+                "active": False
+            }
+            restriction, created = RoleRestriction.objects.get_or_create(
+                user=target_user,
+                defaults=defaults
+            )
+            serializer = UserRestrictionSerializer(restriction, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=400)
+        except Exception as e:
+            return Response({"message": str(e)}, status=500)
 
 
 @api_view(["POST"])

@@ -184,3 +184,5 @@ def regenerate_qrcode(entrer):
     buffer.seek(0)
 
     entrer.barcode.save(f"{ref}.png", File(buffer), save=True)
+
+
