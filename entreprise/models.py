@@ -359,6 +359,7 @@ class Sortie(models.Model):
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     is_remise = models.BooleanField(default=False, null=False, blank=False)
+    remise_code = models.CharField(max_length=50, null=True, blank=True)
 
     slug = models.SlugField(editable=False, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -403,6 +404,7 @@ class Sortie(models.Model):
             self.ref = self.generate_unique_code()
 
         super().save(*args, **kwargs)
+    
     def generate_unique_code(self):
         date_str = datetime.datetime.now().strftime("%m%d")
         random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))

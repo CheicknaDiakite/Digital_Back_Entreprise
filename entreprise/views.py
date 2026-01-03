@@ -3360,7 +3360,8 @@ def update_sorties(request):
         if not sortie_ids or not isinstance(sortie_ids, list):
             return JsonResponse({"message": "Aucun ID valide fourni", "etat": False}, status=400)
 
-        updated_count = Sortie.objects.filter(id__in=sortie_ids).update(is_remise=True)
+        remise_code = str(uuid.uuid4())
+        updated_count = Sortie.objects.filter(id__in=sortie_ids).update(is_remise=True, remise_code=remise_code)
         return JsonResponse({
             "message": f"{updated_count} enregistrements mis à jour.",
             "etat": True

@@ -230,6 +230,13 @@ class SortiesEntrepriseAPIView(APIView):
             # Récupérer toutes les sorties liées à ces entrées
             sorties = Sortie.objects.filter(entrer__in=entrers)
 
+            # Filtrage optionnel sur is_remise
+            is_remise_param = request.query_params.get('is_remise')
+            if is_remise_param is not None:
+                # Convertir la chaîne en booléen (ex: "true" -> True, "false" -> False)
+                is_remise = is_remise_param.lower() in ['true', '1', 'yes']
+                sorties = sorties.filter(is_remise=is_remise)
+
             # Préparer la réponse
             sorties_data = [
                 {
@@ -240,6 +247,7 @@ class SortiesEntrepriseAPIView(APIView):
                     "ref": sortie.ref,
                     "qte": sortie.qte,
                     "is_remise": sortie.is_remise,
+                    "remise_code": sortie.remise_code,
                     "categorie_libelle": sortie.entrer.souscategorie.libelle,
                     "client": sortie.client.nom if sortie.client else None,
                     "libelle": sortie.entrer.libelle,
