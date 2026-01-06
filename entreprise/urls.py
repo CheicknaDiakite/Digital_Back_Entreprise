@@ -15,7 +15,8 @@ from .views import AddEntrepriseView, del_entreprise, get_entreprise, AddCategor
     SousCategorieUnEntrepriseView, \
     del_sous_categorie, set_sous_categorie, set_entre, ordre_paiement, pay_entreprise_get_historique, \
     paiement_entreprise_callback, add_avis, get_avis, del_avis, sous_categories_sorties_par_mois, update_sorties, \
-    update_fac_sorties, api_count_sortie_par_utilisateur, get_depenses_somme, EntrerViewSet
+    update_fac_sorties, api_count_sortie_par_utilisateur, get_depenses_somme, EntrerViewSet, \
+    get_entreprise_historique_client, UtilisateurEntrepriseHistoriqueClient
 from .voirs import CategorieListCreateView, UtilisateurEntreprisesView, EntrepriseDetailView, EntrepriseCreateView, \
     SommeQtePuSortieView, CountSortieParUtilisateurView, DepensesEntrepriseView, DepensesSommeParMoisView, \
     SousCategoriesSortiesParMoisView, SortiesEntrepriseAPIView, ClientListAPIView, EntresEntrepriseAPIView
@@ -114,6 +115,7 @@ urlpatterns = [
     path("facture/sortie/get_facSortiesEntreprise_entreprise/<uuid:entreprise_id>", FacSortiesUserAPIView.as_view(), name="get_sous_categorie_un"),
 
     path('info_sous_cat/get', InfoSousCatView.as_view(), name="info_sous_cat"),
+    path('get_utilisateur_entreprise_historique_client/<uuid:entreprise_uuid>', UtilisateurEntrepriseHistoriqueClient.as_view(), name="info_sous_cat"),
     path('get_utilisateur_entreprise_historique', UtilisateurEntrepriseHistoriqueView.as_view(), name="info_sous_cat"),
     path('get_utilisateur_entreprise_historique_supp/<uuid:entreprise_uuid>', UtilisateurEntrepriseHistoriqueSuppView.as_view(), name="info_sous_cat"),
 

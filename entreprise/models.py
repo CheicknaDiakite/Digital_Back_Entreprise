@@ -311,6 +311,7 @@ class HistoriqueEntrer(models.Model):
     description = models.TextField(blank=True, null=True)
 
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    pu_achat = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=False, blank=False)
     reference = models.CharField(max_length=150, unique=True, null=False, blank=False)
     date = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
@@ -320,6 +321,7 @@ class HistoriqueEntrer(models.Model):
 
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.SET_NULL, null=True, blank=True)
     entreprise = models.ForeignKey(Entreprise, on_delete=models.SET_NULL, null=True, blank=True)
+    client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"Historique de {self.ref} - {self.action}"
@@ -427,6 +429,7 @@ class HistoriqueSortie(models.Model):
 
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.SET_NULL, null=True, blank=True)
     entreprise = models.ForeignKey(Entreprise, on_delete=models.SET_NULL, null=True, blank=True)
+    client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"Historique de {self.sortie.ref} - {self.action}"

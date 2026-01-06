@@ -2518,14 +2518,17 @@ class AddEntrerView(APIView):
         if cumuler_quantite and dernier:
             # Client différent → reset
             if dernier.client != client:
-                dernier.client = None
+                return Response({
+                    "etat": False,
+                    "message": "Impossible de cumuler : client différent"
+                }, status=400)
 
             ancien_qte = dernier.qte
             dernier.qte += qte
             dernier.pu = pu
-            dernier.date = date
+            dernier.pu_achat = pu_achat
             dernier.ref = data.get("ref") or dernier.generate_unique_code()
-
+            
             # Création historique
             HistoriqueEntrer.objects.create(
                 entrer=dernier,
@@ -2536,7 +2539,8 @@ class AddEntrerView(APIView):
                 ancien_qte=ancien_qte,
                 cumuler_qe=cumuler_quantite,
                 pu=pu,
-                date=date,
+                pu_achat=pu_achat,
+                client=client,
                 action="updated",
                 reference=dernier.generate_unique_code()
             )
@@ -2579,7 +2583,9 @@ class AddEntrerView(APIView):
             categorie=f"{categorie.libelle} ({entrer.libelle})",
             qte=qte,
             pu=pu,
+            pu_achat=pu_achat,
             date=date,
+            client=client,
             action="created"
         )
 
@@ -2719,6 +2725,7 @@ def del_entre(request):
     ref_entrer = entrer.ref
     qte = entrer.qte
     pu = entrer.pu
+    client = entrer.client if entrer.client else None
     categorie_txt = f"{entrer.souscategorie.libelle} ({entrer.libelle})"
 
     # Ajout à l'historique
@@ -2730,6 +2737,7 @@ def del_entre(request):
         categorie=categorie_txt,
         qte=qte,
         pu=pu,
+        client=client,
         action="deleted",
         utilisateur=user
     )
@@ -2743,6 +2751,85 @@ def del_entre(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def get_entre(request):
+    response_data = {'message': "Requête invalide", 'etat': False, 'donnee': []}
+
+    if request.method == "POST":
+        try:
+            form = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False, 'donnee': []})
+
+        all_livre = Entrer.objects.all()
+        filtrer = False
+
+        user_id = form.get("user_id")
+        if user_id:
+            user = Utilisateur.objects.filter(uuid=user_id).first()
+
+            if user:
+                # if user.has_perm('entreprise.view_entrer'):
+                if (user.groups.filter(name="Admin").exists()
+                        or user.groups.filter(name="Editor").exists()
+                ):
+                    livre_id = form.get("id")
+                    if livre_id:
+                        all_livre = all_livre.filter(id=livre_id)
+                        filtrer = True
+
+                    client_id = form.get("client_id")
+                    if client_id:
+                        client = Client.objects.filter(uuid=client_id).first()
+                        if client:
+                            all_livre = all_livre.filter(client=client)
+                            filtrer = True
+                            # Si aucun enregistrement pour ce client, renvoyer un tableau vide dans 'donnee'
+                            if not all_livre.exists():
+                                return JsonResponse(
+                                    {'message': "Aucun enregistrement trouvé pour ce client.", 'etat': True,
+                                     'donnee': []})
+                        else:
+                            return JsonResponse({'message': "Client non trouvé.", 'etat': False, 'donnee': []})
+                    else:
+                        return JsonResponse({'message': "Aucun client_id fourni dans les données.", 'etat': False})
+
+                    if filtrer:
+                        data = []
+                        for liv in all_livre:
+                            data.append({
+                                "id": liv.id,
+                                "uuid": liv.uuid,
+                                "categorie_libelle": liv.souscategorie.libelle,
+                                "slug": liv.slug,
+                                "libelle": liv.libelle,
+                                "pu": liv.pu,
+                                "is_sortie": liv.is_sortie,
+                                "is_prix": liv.is_prix,
+
+                                "pu_achat": liv.pu_achat,
+                                "qte": liv.qte,
+                                "price": liv.prix_total,
+                                "image": liv.souscategorie.image.url if liv.souscategorie.image else None,
+                                "date": str(liv.date),
+                            })
+
+                        response_data["etat"] = True
+                        response_data["message"] = "success"
+                        response_data["donnee"] = data
+                        if not data:
+                            response_data["message"] = "Aucune catégorie trouvée."
+                else:
+                    response_data["message"] = "Vous n'avez pas la permission de voir les entrées."
+            else:
+                response_data["message"] = "Utilisateur non trouvé."
+        else:
+            response_data["message"] = "Identifiant utilisateur manquant."
+
+    return JsonResponse(response_data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_entreprise_historique_client(request):
     response_data = {'message': "Requête invalide", 'etat': False, 'donnee': []}
 
     if request.method == "POST":
@@ -2865,6 +2952,7 @@ def set_entre(request):
     HistoriqueEntrer.objects.create(
         entrer=entrer,
         ref=entrer.ref,
+        client=entrer.client,
         libelle=f"Produit modifié par {user.first_name} {user.last_name}",
         categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
         qte=data.get("qte", entrer.qte),
@@ -4271,6 +4359,90 @@ class UtilisateurEntrepriseHistoriqueView(APIView):
             }
 
         return JsonResponse(response_data)
+
+
+class UtilisateurEntrepriseHistoriqueClient(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, entreprise_uuid):
+        try:
+            entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
+
+            historiques_entrer = HistoriqueEntrer.objects.filter(
+                entrer__souscategorie__categorie__entreprise=entreprise
+            ).select_related('client', 'entrer')
+
+            historiques_sortie = HistoriqueSortie.objects.filter(
+                sortie__entrer__souscategorie__categorie__entreprise=entreprise
+            ).select_related('client', 'sortie')
+
+            historiques_combines = sorted(
+                chain(historiques_entrer, historiques_sortie),
+                key=lambda x: x.created_at,
+                reverse=True
+            )
+
+            historiques_data = []
+
+            for historique in historiques_combines:
+
+                # 🔹 Sérialisation client
+                # client_data = None
+                # if historique.client:
+                #     client_data = {
+                #         "uuid": str(historique.client.uuid),
+                #         "nom": historique.client.nom,
+                #         "telephone": historique.client.telephone,
+                #     }
+                client_data = str(historique.client.uuid) if historique.client else None
+
+                if hasattr(historique, 'entrer'):
+                    historiques_data.append({
+                        "type": "entrer",
+                        "ref": historique.entrer.ref,
+                        "action": historique.action,
+                        "qte": historique.qte,
+                        "ancien_qte": historique.ancien_qte,
+                        "cumuler_qe": historique.cumuler_qe,
+                        "pu": historique.pu,
+                        "pu_achat": historique.pu_achat,
+                        "client": client_data,
+                        "libelle": historique.libelle,
+                        "categorie": historique.categorie,
+                        "date": historique.created_at
+                    })
+
+                else:
+                    historiques_data.append({
+                        "type": "sortie",
+                        "ref": historique.sortie.ref,
+                        "action": historique.action,
+                        "qte": historique.qte,
+                        "pu": historique.pu,
+                        "client": client_data,
+                        "libelle": historique.libelle,
+                        "categorie": historique.categorie,
+                        "date": historique.created_at
+                    })
+
+            return JsonResponse({
+                "etat": True,
+                "message": "Historique avec clients récupéré avec succès",
+                "donnee": {
+                    # "entreprise": {
+                    #     "uuid": str(entreprise.uuid),
+                    #     "nom": entreprise.nom,
+                    #     "email": entreprise.email,
+                    # },
+                    "historique": historiques_data
+                }
+            }, safe=False)
+
+        except Entreprise.DoesNotExist:
+            return JsonResponse({
+                "etat": False,
+                "message": "Entreprise non trouvée"
+            }, status=404)
 
 
 class UtilisateurEntrepriseHistoriqueSuppView(APIView):

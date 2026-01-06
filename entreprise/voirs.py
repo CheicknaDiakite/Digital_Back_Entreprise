@@ -540,19 +540,24 @@ class SousCategoriesSortiesParMoisView(APIView):
 
     def get(self, request, entreprise_uuid):
         try:
-            date_actuelle = now()
-            debut_annee = date_actuelle.replace(month=1, day=1)
+            # Année demandée (optionnelle)
+            annee = request.GET.get("annee")
 
-            # Récupération de l'entreprise
+            if annee:
+                annee = int(annee)
+            else:
+                annee = now().year
+
+            debut_annee = now().replace(year=annee, month=1, day=1)
+            fin_annee = now().replace(year=annee, month=12, day=31, hour=23, minute=59, second=59)
+
             entreprise = Entreprise.objects.get(uuid=entreprise_uuid)
 
-            # Filtrage des sorties depuis le début de l'année
             sorties = Sortie.objects.filter(
                 entrer__souscategorie__categorie__entreprise=entreprise,
-                created_at__gte=debut_annee
+                created_at__range=(debut_annee, fin_annee)
             ).select_related('entrer__souscategorie')
 
-            # Agrégation par mois + sous-catégorie
             sorties_par_mois = sorties.annotate(
                 mois=TruncMonth('created_at')
             ).values(
@@ -562,15 +567,14 @@ class SousCategoriesSortiesParMoisView(APIView):
                 somme_qte=Sum('qte')
             ).order_by('mois')
 
-            # Transformation du résultat en format lisible
             resultats_par_mois = []
             mois_actuel = None
             details = []
 
             for sortie in sorties_par_mois:
-                mois = sortie['mois'].strftime("%B %Y")
+                mois_format = sortie['mois'].strftime("%B %Y")
 
-                if mois_actuel and mois_actuel != mois:
+                if mois_actuel and mois_actuel != mois_format:
                     resultats_par_mois.append({
                         "month": mois_actuel,
                         "details": details
@@ -581,7 +585,8 @@ class SousCategoriesSortiesParMoisView(APIView):
                     "libelle": sortie['entrer__souscategorie__libelle'],
                     "somme_qte": sortie['somme_qte']
                 })
-                mois_actuel = mois
+
+                mois_actuel = mois_format
 
             if mois_actuel:
                 resultats_par_mois.append({
@@ -589,16 +594,13 @@ class SousCategoriesSortiesParMoisView(APIView):
                     "details": details
                 })
 
-            # Structure finale des données
-            data = {
-                "annee": debut_annee.year,
-                "sorties_par_mois": resultats_par_mois
-            }
-
             return Response({
                 "etat": True,
-                "message": "Données des quantités de sorties par mois récupérées avec succès",
-                "donnee": data
+                "message": "Données récupérées avec succès",
+                "donnee": {
+                    "annee": annee,
+                    "sorties_par_mois": resultats_par_mois
+                }
             }, status=status.HTTP_200_OK)
 
         except Entreprise.DoesNotExist:
