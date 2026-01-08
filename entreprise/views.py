@@ -2959,6 +2959,7 @@ def set_entre(request):
         description=data.get("description"),
         ancien_qte=fields_changed["qte"]["ancien"] if "qte" in fields_changed else None,
         pu=data.get("pu", entrer.pu),
+        pu_achat=data.get("pu_achat", entrer.pu_achat),
         action="updated"
     )
 
