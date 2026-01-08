@@ -2972,7 +2972,6 @@ def set_entre(request):
         "changes": fields_changed
     })
 
-
 # @csrf_exempt
 # @token_required
 # def get_entre(request):
@@ -4409,6 +4408,7 @@ class UtilisateurEntrepriseHistoriqueClient(APIView):
                         "pu_achat": historique.pu_achat,
                         "client": client_data,
                         "libelle": historique.libelle,
+                        "description": historique.description,
                         "categorie": historique.categorie,
                         "date": historique.created_at
                     })
@@ -4422,6 +4422,7 @@ class UtilisateurEntrepriseHistoriqueClient(APIView):
                         "pu": historique.pu,
                         "client": client_data,
                         "libelle": historique.libelle,
+                        "description": historique.description,
                         "categorie": historique.categorie,
                         "date": historique.created_at
                     })
