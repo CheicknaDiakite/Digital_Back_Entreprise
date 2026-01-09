@@ -379,39 +379,60 @@ class CountSortieParUtilisateurView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Récupérer l'éventuel paramètre de filtrage par utilisateur et par date
+        user_uuid = request.query_params.get('user_uuid')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
         # QuerySet des sorties de l’entreprise
         qs = Sortie.objects.filter(
             entrer__souscategorie__categorie__entreprise=entreprise
-        ).select_related('created_by')
+        ).select_related('created_by', 'entrer__souscategorie')
 
-        # 1) Total des quantités vendues par utilisateur
+        if user_uuid:
+            qs = qs.filter(created_by__uuid=user_uuid)
+
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
+
+        # 1) Total des quantités et montants vendus par utilisateur
         total_qte_par_user = (
-            qs.values('created_by__id', 'created_by__username')
-            .annotate(total_qte=Sum('qte'))
+            qs.values('created_by__id', 'created_by__username', 'created_by__uuid')
+            .annotate(
+                total_qte=Sum('qte'),
+                total_montant=Sum(F('qte') * F('pu'))
+            )
             .order_by('-total_qte')
         )
 
         total_par_utilisateur = [
             {
                 'user_id': rec['created_by__id'],
+                'user_uuid': rec['created_by__uuid'],
                 'username': rec['created_by__username'] or "Inconnu",
-                'total_qte': rec['total_qte'] or 0
+                'total_qte': rec['total_qte'] or 0,
+                'total_montant': float(rec['total_montant']) if rec['total_montant'] else 0
             }
             for rec in total_qte_par_user
         ]
 
         # 2) Nombre total de ventes (sorties) par utilisateur
         total_nombre_vente = (
-            qs.values('created_by__id', 'created_by__username')
+            qs.values('created_by__id', 'created_by__username', 'created_by__uuid')
             .annotate(total=Count('id'))
             .order_by('-total')
         )
 
-        # 3) Quantités vendues par utilisateur **par mois**
+        # 3) Quantités et montants vendus par utilisateur **par mois**
         qs_monthly = (
             qs.annotate(mois=TruncMonth('created_at'))
-            .values('created_by__id', 'created_by__username', 'mois')
-            .annotate(total_qte=Sum('qte'))
+            .values('created_by__id', 'created_by__username', 'created_by__uuid', 'mois')
+            .annotate(
+                total_qte=Sum('qte'),
+                total_montant=Sum(F('qte') * F('pu'))
+            )
             .order_by('mois', 'created_by__username')
         )
 
@@ -421,8 +442,10 @@ class CountSortieParUtilisateurView(APIView):
             mois_str = rec['mois'].strftime('%B %Y').capitalize()
             mois_groupes[mois_str].append({
                 'user_id': rec['created_by__id'],
+                'user_uuid': rec['created_by__uuid'],
                 'username': rec['created_by__username'] or "Inconnu",
-                'total_qte': rec['total_qte'] or 0
+                'total_qte': rec['total_qte'] or 0,
+                'total_montant': float(rec['total_montant']) if rec['total_montant'] else 0
             })
 
         resultats_par_mois = [
@@ -430,18 +453,45 @@ class CountSortieParUtilisateurView(APIView):
             for mois, details in mois_groupes.items()
         ]
 
+        # 4) Détails des dernières ventes si un utilisateur est spécifique
+        derniere_ventes = []
+        if user_uuid:
+            derniere_ventes = [
+                {
+                    'uuid': s.uuid,
+                    'produit': s.entrer.libelle,
+                    'qte': s.qte,
+                    'pu': float(s.pu),
+                    'total': float(s.qte * s.pu),
+                    'date': s.created_at.strftime('%Y-%m-%d %H:%M')
+                }
+                for s in qs.order_by('-created_at')[:20]
+            ]
+
         # Données finales
         data = {
             'total_par_utilisateur': total_par_utilisateur,
-            'total_nombre_vente': list(total_nombre_vente),
+            'total_nombre_vente': [
+                {
+                    'user_id': rec['created_by__id'],
+                    'user_uuid': rec['created_by__uuid'],
+                    'username': rec['created_by__username'] or "Inconnu",
+                    'total': rec['total']
+                }
+                for rec in total_nombre_vente
+            ],
             'mensuel_par_utilisateur': resultats_par_mois,
+            'derniere_ventes': derniere_ventes,
         }
 
         return Response({
             'etat': True,
-            'message': "Somme des quantités vendues par utilisateur (total et mensuel)",
+            'message': "Somme des quantités et montants vendus par utilisateur",
             'donnee': data
         }, status=status.HTTP_200_OK)
+
+
+
 class DepensesSommeParMoisView(APIView):
     permission_classes = [permissions.IsAuthenticated]  # Authentification requise
 

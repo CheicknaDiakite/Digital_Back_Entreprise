@@ -13,6 +13,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -1044,13 +1045,9 @@ def api_user_get(request):
         # Récupérer l'utilisateur connecté
         current_user = request.user
 
-        # Filtrer uniquement les utilisateurs créés par l'administrateur connecté
+        # Filtrer uniquement les utilisateurs créés par l'administrateur connecté, y compris lui-même
         if current_user.groups.filter(name="Admin").exists():
-            all_use = all_user.filter(created_by=current_user)
-            if all_use:
-                all_user = all_use
-            else:
-                all_user = Utilisateur.objects.filter(uuid=user_id)
+            all_user = all_user.filter(Q(created_by=current_user) | Q(id=current_user.id))
 
         if user:
             # Vérifier les permissions de l'utilisateur
