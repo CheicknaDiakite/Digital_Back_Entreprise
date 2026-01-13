@@ -3,6 +3,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from decimal import Decimal
 from itertools import chain
 
 import qrcode
@@ -2475,8 +2476,9 @@ class AddEntrerView(APIView):
         data = request.data
 
         # Validation basique
-        qte = int(data.get("qte", 0))
-        qte_critique = int(data.get("qte_critique", 0))
+        qte = float(data.get("qte", 0))
+        unite = data.get("unite", "kilos")
+        qte_critique = float(data.get("qte_critique", 0))
         pu = data.get("pu")
         pu_achat = data.get("pu_achat", 0)
         libelle = data.get("libelle")
@@ -2524,8 +2526,9 @@ class AddEntrerView(APIView):
                 }, status=400)
 
             ancien_qte = dernier.qte
-            dernier.qte += qte
+            dernier.qte = Decimal(str(dernier.qte)) + Decimal(str(qte))
             dernier.pu = pu
+            dernier.unite = unite
             dernier.pu_achat = pu_achat
             dernier.ref = data.get("ref") or dernier.generate_unique_code()
             
@@ -2536,6 +2539,7 @@ class AddEntrerView(APIView):
                 libelle=f"Produit modifié par {user.first_name} {user.last_name}",
                 categorie=categorie.libelle,
                 qte=qte,
+                unite=unite,
                 ancien_qte=ancien_qte,
                 cumuler_qe=cumuler_quantite,
                 pu=pu,
@@ -2555,6 +2559,7 @@ class AddEntrerView(APIView):
         entrer = Entrer.objects.create(
             souscategorie=categorie,
             qte=qte,
+            unite=unite,
             qte_critique=qte_critique,
             pu=pu,
             pu_achat=pu_achat,
@@ -2582,6 +2587,7 @@ class AddEntrerView(APIView):
             libelle=f"Produit ajouté par {user.first_name} {user.last_name}",
             categorie=f"{categorie.libelle} ({entrer.libelle})",
             qte=qte,
+            unite=unite,
             pu=pu,
             pu_achat=pu_achat,
             date=date,
@@ -2927,7 +2933,7 @@ def set_entre(request):
 
     # ---- Tracking des modifications ----
     fields_changed = {}
-    allowed_fields = ["qte", "qte_critique", "pu", "pu_achat", "is_sortie", "is_prix", "libelle"]
+    allowed_fields = ["qte", "qte_critique", "pu", "pu_achat", "is_sortie", "is_prix", "libelle", "unite"]
 
     for field in allowed_fields:
         if field in data:
@@ -2956,6 +2962,7 @@ def set_entre(request):
         libelle=f"Produit modifié par {user.first_name} {user.last_name}",
         categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
         qte=data.get("qte", entrer.qte),
+        unite=data.get("unite", entrer.unite),
         description=data.get("description"),
         ancien_qte=fields_changed["qte"]["ancien"] if "qte" in fields_changed else None,
         pu=data.get("pu", entrer.pu),
@@ -3065,6 +3072,7 @@ def get_entre_un(request, uuid):
             "uuid": livre.uuid,
             "libelle": livre.libelle,
             "pu": livre.pu,
+            "unite": livre.unite,
             "pu_achat": livre.pu_achat,
             "is_sortie": livre.is_sortie,
             "is_prix": livre.is_prix,
@@ -3255,7 +3263,8 @@ class SortieCreateView(APIView):
     def post(self, request):
         data = request.data
 
-        qte = data.get("qte")
+        qte = float(data.get("qte", 0))
+        unite = data.get("unite", "kilos")
         pu = data.get("pu")
         admin = request.user
         entrer_id = data.get("entre_id")
@@ -3273,13 +3282,14 @@ class SortieCreateView(APIView):
                             status=status.HTTP_404_NOT_FOUND)
 
         # Vérification stock
-        if entrer.qte - int(qte) < 0:
+        if Decimal(str(entrer.qte)) - Decimal(str(qte)) < 0:
             return Response({'etat': False, 'message': "Stock insuffisant"},
                             status=status.HTTP_400_BAD_REQUEST)
 
         # Création sortie
         sortie = Sortie(
             qte=qte,
+            unite=unite,
             pu=pu,
             entrer=entrer,
             created_by=admin
@@ -3303,7 +3313,7 @@ class SortieCreateView(APIView):
         sortie.save()
 
         # 🔥 Mise à jour stock
-        entrer.qte -= int(qte)
+        entrer.qte = Decimal(str(entrer.qte)) - Decimal(str(qte))
         entrer.save()
 
         # 🔥 Enregistrer HistoriqueSortie
@@ -3311,6 +3321,7 @@ class SortieCreateView(APIView):
             sortie=sortie,
             ref=sortie.ref,
             qte=sortie.qte,
+            unite=sortie.unite,
             pu=sortie.pu,
             action="created",
             libelle=f"Produit sorti par {admin.first_name} {admin.last_name}",
@@ -3502,36 +3513,34 @@ def del_sortie(request):
     response_data = {'message': "Requete invalide", 'etat': False}
 
     if request.method == "POST":
-        try:
-            form = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return JsonResponse({'message': "Erreur lors de la lecture des données JSON", 'etat': False})
+        data = request.data # Utiliser request.data pour un accès plus propre aux données de l'API
 
-        sortie_id = form.get("uuid")
-        action_type = form.get("action")  # "cancel" ou "delete"
-        user_id = form.get("user_id")
-        entreprise_id = form.get("entreprise_id")
-        description = form.get("description")
+        sortie_id = data.get("uuid")
+        action_type = data.get("action")  # "cancel" ou "delete"
+        user_id = data.get("user_id")
+        entreprise_id = data.get("entreprise_id")
+        description = data.get("description")
 
+        # Recherche utilisateur
         user = Utilisateur.objects.filter(uuid=user_id).first()
-
         if not user:
-            return JsonResponse({"etat": False, "message": "Utilisateur non trouvé."})
+            return Response({"etat": False, "message": "Utilisateur non trouvé."}, status=404)
 
         # Permissions
         if not (user.groups.filter(name__in=["Admin", "Editor"]).exists()):
-            return JsonResponse({"etat": False, "message": "Vous n'avez pas la permission."})
+            return Response({"etat": False, "message": "Vous n'avez pas la permission."}, status=403)
 
         # Vérif sortie
         sortie = Sortie.objects.filter(uuid=sortie_id).first()
         if not sortie:
-            return JsonResponse({"etat": False, "message": "Sortie non trouvée."})
+            return Response({"etat": False, "message": "Sortie non trouvée."}, status=404)
 
         entreprise = Entreprise.objects.filter(uuid=entreprise_id).first()
 
         # Données historiques
         ref = sortie.ref
-        qte = sortie.qte
+        qte = Decimal(str(sortie.qte))
+        unite = sortie.unite
         pu = sortie.pu
         entrer = sortie.entrer
         libelle = entrer.libelle
@@ -3543,8 +3552,8 @@ def del_sortie(request):
         # -----------------------------
         if action_type == "cancel":
 
-            # On remet la quantité initiale
-            entrer.qte += int(qte)
+            # On remet la quantité initiale (gestion des virgules via Decimal)
+            entrer.qte = Decimal(str(entrer.qte)) + qte
             entrer.save()
 
             # Historique
@@ -3555,6 +3564,7 @@ def del_sortie(request):
                 categorie=f"{categorie} ({libelle})",
                 libelle=f"Sortie annulée par {utilisateur.first_name} {utilisateur.last_name}",
                 qte=qte,
+                unite=unite,
                 description=description,
                 pu=pu,
                 utilisateur=utilisateur,
@@ -3564,9 +3574,10 @@ def del_sortie(request):
             # Suppression réelle
             sortie.delete()
 
-            response_data["etat"] = True
-            response_data["message"] = "Sortie annulée avec succès"
-            return JsonResponse(response_data)
+            return Response({
+                "etat": True,
+                "message": "Sortie annulée avec succès et stock mis à jour"
+            }, status=200)
 
         # -----------------------------
         # 🔥 2. SUPPRESSION DÉFINITIVE
@@ -3581,6 +3592,7 @@ def del_sortie(request):
                 categorie=f"{categorie} ({libelle})",
                 libelle=f"Produit supprimé par {utilisateur.first_name} {utilisateur.last_name}",
                 qte=qte,
+                unite=unite,
                 pu=pu,
                 description=description,
                 utilisateur=utilisateur,
@@ -3590,14 +3602,15 @@ def del_sortie(request):
             # Suppression réelle
             sortie.delete()
 
-            response_data["etat"] = True
-            response_data["message"] = "Sortie supprimée définitivement"
-            return JsonResponse(response_data)
+            return Response({
+                "etat": True,
+                "message": "Sortie supprimée définitivement"
+            }, status=200)
 
         else:
-            return JsonResponse({"etat": False, "message": "Action invalide (cancel/delete attendu)"})
+            return Response({"etat": False, "message": "Action invalide (cancel/delete attendu)"}, status=400)
 
-    return JsonResponse(response_data)
+    return Response(response_data, status=400)
 
 
 @csrf_exempt

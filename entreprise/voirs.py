@@ -173,6 +173,7 @@ class EntresEntrepriseAPIView(APIView):
                         "uuid": entrer.uuid,
                         "libelle": entrer.libelle,
                         "pu": entrer.pu,
+                        "unite": entrer.unite,
                         "pu_achat": entrer.pu_achat,
                         "ref": entrer.ref,
                         "client": entrer.client.nom if entrer.client else None,
@@ -244,6 +245,7 @@ class SortiesEntrepriseAPIView(APIView):
                     "uuid": sortie.uuid,
                     "slug": sortie.slug,
                     "pu": sortie.pu,
+                    "unite": sortie.unite,
                     "ref": sortie.ref,
                     "qte": sortie.qte,
                     "is_remise": sortie.is_remise,
@@ -459,7 +461,8 @@ class CountSortieParUtilisateurView(APIView):
             derniere_ventes = [
                 {
                     'uuid': s.uuid,
-                    'produit': s.entrer.libelle,
+                    'libelle': s.entrer.libelle,
+                    'produit': s.entrer.souscategorie.categorie.libelle,
                     'qte': s.qte,
                     'pu': float(s.pu),
                     'total': float(s.qte * s.pu),

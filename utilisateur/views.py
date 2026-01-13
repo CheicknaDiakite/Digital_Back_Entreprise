@@ -556,6 +556,11 @@ def api_user_set_profil(request):
                         user_from_data_base.role = role
                         modifier = True
 
+                    typeRole = form.get("typeRole")
+                    if typeRole:
+                        user_from_data_base.typeRole = typeRole
+                        modifier = True
+
                     # is_cabinet = form.get("is_cabinet")
                     # if is_cabinet:
                     #     user_from_data_base.is_cabinet = is_cabinet

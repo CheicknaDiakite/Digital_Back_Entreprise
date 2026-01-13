@@ -23,7 +23,8 @@ class UtilisateurSerializer(serializers.ModelSerializer):
             'email_user',
             'is_admin',
             'is_superuser',
-            'numero'
+            'numero',
+            'typeRole'
         ]
 
     def get_avatar(self, obj):

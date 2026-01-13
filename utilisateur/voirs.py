@@ -80,6 +80,7 @@ class UserProfileView(APIView):
             "is_admin": user.is_admin,
             "is_cabinet": user.is_cabinet,
             "is_superuser": user.is_superuser,
+            "typeRole": user.typeRole,
             "avatar": user.avatar.url if user.avatar else None
         }
 
@@ -106,6 +107,7 @@ class UserUnView(APIView):
             "is_admin": user.is_admin,
             "is_cabinet": user.is_cabinet,
             "is_superuser": user.is_superuser,
+            "typeRole": user.typeRole,
             "avatar": user.avatar.url if user.avatar else None
         }
 

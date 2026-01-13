@@ -15,31 +15,29 @@ class EntrepriseSerializer(serializers.ModelSerializer):
         fields = ["id", "nom", "adresse", "numero", "email", "libelle", "type_licence"]
 
     def create(self, validated_data):
-        # user_id = validated_data.pop("user_id")
-        type_licence = validated_data.pop("type_licence", 1)
-
-        # Vérifier si l'utilisateur existe
-        # user = Utilisateur.objects.filter(uuid=user_id).first()
-        # if not user:
-        #     raise serializers.ValidationError("Utilisateur non trouvé.")
+        # On ignore le type_licence envoyé par le client, on le définit selon le typeRole de l'utilisateur
+        validated_data.pop("type_licence", None)
+        
         request = self.context.get("request")
         user = request.user if request else None
-        type_licence = validated_data.pop("type_licence", 1)
 
         if not user or not user.is_authenticated:
             raise serializers.ValidationError("Utilisateur non authentifié.")
 
+        # Déterminer le type de licence selon le typeRole de l'utilisateur
+        # Simple/1 -> FREE/1, Basic/2 -> BASIC/2, Premium/3 -> PREMIUM/3
+        type_licence = user.typeRole if user.typeRole in [1, 2, 3] else 1
 
         # Vérifier le nombre d’entreprises max
         if user.entreprises.count() >= 10:
             raise serializers.ValidationError("Vous possédez déjà plus de 10 entreprises.")
 
         # Calcul de la date d’expiration de la licence
-        if type_licence == 1:
+        if type_licence == 1: # FREE
             date_expiration = datetime.now().date() + timedelta(days=7)
-        elif type_licence == 2:
+        elif type_licence == 2: # BASIC
             date_expiration = datetime.now().date() + timedelta(days=180)
-        elif type_licence == 3:
+        elif type_licence == 3: # PREMIUM
             date_expiration = datetime.now().date() + timedelta(days=365)
         else:
             raise serializers.ValidationError("Type de licence invalide.")
@@ -86,7 +84,7 @@ class EntrerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Entrer
         fields = [
-            "id", "uuid", "slug", "ref", "libelle", "qte", "pu", "pu_achat",
+            "id", "uuid", "slug", "ref", "libelle", "qte", "unite", "pu", "pu_achat",
             "date", "cumuler_quantite", "is_sortie", "is_prix",
             "client_id", "categorie_slug", "user_id"
         ]
@@ -133,7 +131,7 @@ class EntrerSerializer(serializers.ModelSerializer):
 class SortieSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sortie
-        fields = ['id', 'uuid', 'slug', 'qte', 'pu', 'entrer', 'client', 'created_by', 'created_at']
+        fields = ['id', 'uuid', 'slug', 'qte', 'unite', 'pu', 'entrer', 'client', 'created_by', 'created_at']
         read_only_fields = ['id', 'uuid', 'slug', 'created_at']
 
 
@@ -172,7 +170,7 @@ class SortieEntrepriseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sortie
         fields = [
-            "id", "uuid", "slug", "pu", "ref", "qte", "is_remise",
+            "id", "uuid", "slug", "pu", "ref", "qte", "unite", "is_remise",
             "categorie_libelle", "client", "libelle", "prix_total", "somme_total",
             "prix_sortie", "image", "created_at"
         ]

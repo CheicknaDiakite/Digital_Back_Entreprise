@@ -14,11 +14,21 @@ class Utilisateur(AbstractUser):
     AUTHOR = 3
     VISITOR = 4
 
+    Simple = 1
+    Basic = 2
+    Premium = 3
+
     choice = (
         (ADMIN, "Admin"),
         (EDITOR, "Editor"),
         (AUTHOR, "Author"),
         (VISITOR, "Visitor"),
+    )
+
+    choiceTypeRole = (
+        (Simple, "Simple"),
+        (Basic, "Basic"),
+        (Premium, "Premium"),
     )
 
     created_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL,
@@ -38,6 +48,7 @@ class Utilisateur(AbstractUser):
     email_user = models.EmailField(blank=True, null=True)
 
     role = models.PositiveSmallIntegerField(choices=choice, null=True, blank=True)
+    typeRole = models.PositiveSmallIntegerField(choices=choiceTypeRole, default=Basic)
 
     # boutiques = models.ManyToManyField('Boutique', related_name='utilisateurs',
     #                                    blank=True)  # Relation optionnelle
@@ -160,12 +171,12 @@ class RoleRestriction(models.Model):
 class Licence(models.Model):
     FREE = 1
     BASIC = 2
-    PREMUIM = 3
+    PREMIUM = 3
 
     TYPE_CHOICES = [
-        (FREE, 'Essai'),
-        (BASIC, 'Standard'),
-        (PREMUIM, 'Premium'),
+        (FREE, 'Stock Simple'),
+        (BASIC, 'Stock Pro'),
+        (PREMIUM, 'Stock Premium'),
     ]
 
     type = models.PositiveSmallIntegerField(choices=TYPE_CHOICES, default=FREE)

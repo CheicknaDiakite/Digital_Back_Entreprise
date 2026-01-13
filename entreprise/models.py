@@ -242,13 +242,20 @@ class Depense(models.Model):
         return f"{date_str}{random_str}"
 
 
+UNITE_CHOICES = [
+    ('litre', 'Litre'),
+    ('kilos', 'Kilos'),
+    ('mètres', 'Mètres'),
+]
+
 class Entrer(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     souscategorie = models.ForeignKey(SousCategorie, on_delete=models.CASCADE)
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
     libelle = models.CharField(max_length=200, null=False)
-    qte = models.IntegerField(default=0)
-    qte_critique = models.IntegerField(default=0, null=False, blank=False)
+    qte = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    unite = models.CharField(max_length=20, choices=UNITE_CHOICES, default='kilos')
+    qte_critique = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=False, blank=False)
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     pu_achat = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=False, blank=False)
     # Champ booléen pour déterminer si on doit cumuler ou non la quantité
@@ -303,9 +310,10 @@ class HistoriqueEntrer(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     entrer = models.ForeignKey(Entrer, on_delete=models.SET_NULL, null=True, blank=True)
     ref = models.CharField(max_length=150)
-    qte = models.IntegerField()
+    qte = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    unite = models.CharField(max_length=20, choices=UNITE_CHOICES, default='kilos')
 
-    ancien_qte = models.IntegerField(null=True, blank=True)
+    ancien_qte = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     cumuler_qe = models.BooleanField(default=False, null=True, blank=True)
 
     description = models.TextField(blank=True, null=True)
@@ -357,7 +365,8 @@ class Sortie(models.Model):
 
     ref = models.CharField(max_length=150, unique=True, null=False, blank=False)
 
-    qte = models.IntegerField(default=0)
+    qte = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    unite = models.CharField(max_length=20, choices=UNITE_CHOICES, default='kilos')
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     is_remise = models.BooleanField(default=False, null=False, blank=False)
@@ -381,7 +390,7 @@ class Sortie(models.Model):
 
     @property
     def prix_stock(self):
-        return int(self.entrer.qte) - int(self.qte)
+        return float(self.entrer.qte) - float(self.qte)
 
     def _get_unique_slug(self):
         slug = slugify(self.entrer)
@@ -394,7 +403,7 @@ class Sortie(models.Model):
 
     def save(self, *args, **kwargs):
         # Vérifier stock
-        if self.entrer.qte - int(self.qte) < 0:
+        if float(self.entrer.qte) - float(self.qte) < 0:
             raise ValidationError("Impossible : quantité demandée indisponible.")
 
         # Générer slug si besoin
@@ -417,7 +426,8 @@ class HistoriqueSortie(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     sortie = models.ForeignKey(Sortie, on_delete=models.SET_NULL, null=True, blank=True)
     ref = models.CharField(max_length=150)
-    qte = models.IntegerField()
+    qte = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    unite = models.CharField(max_length=20, choices=UNITE_CHOICES, default='kilos')
     pu = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     action = models.CharField(max_length=50)  # "created", "updated", "deleted"
     libelle = models.CharField(max_length=150, null=True, blank=True)
@@ -432,7 +442,8 @@ class HistoriqueSortie(models.Model):
     client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
-        return f"Historique de {self.sortie.ref} - {self.action}"
+        return f"Historique de {self.sortie.ref if self.sortie else self.ref} - {self.action}"
+
 
     def save(self, *args, user=None, **kwargs):
         # Générer une référence unique s'il n'y en a pas
