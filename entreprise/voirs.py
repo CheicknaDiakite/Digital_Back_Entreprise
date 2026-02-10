@@ -769,6 +769,27 @@ class PayerFactureAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class FactureDeleteAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, uuid):
+        facture = get_object_or_404(Facture, uuid=uuid)
+        
+        # Supprimer les sorties associées et restaurer le stock
+        for sortie in facture.sorties.all():
+            entrer = sortie.entrer
+            entrer.qte = Decimal(str(entrer.qte)) + Decimal(str(sortie.qte))
+            entrer.save()
+            sortie.delete()
+            
+        facture.delete()
+        
+        return Response({
+            "etat": True,
+            "message": "Facture supprimée avec succès et stock mis à jour"
+        }, status=status.HTTP_200_OK)
+
+
 class SortieCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

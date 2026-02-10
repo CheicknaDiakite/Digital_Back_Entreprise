@@ -20,7 +20,7 @@ from .views import AddEntrepriseView, del_entreprise, get_entreprise, AddCategor
 from .voirs import CategorieListCreateView, UtilisateurEntreprisesView, EntrepriseDetailView, EntrepriseCreateView, \
     SommeQtePuSortieView, CountSortieParUtilisateurView, DepensesEntrepriseView, DepensesSommeParMoisView, \
     SousCategoriesSortiesParMoisView, SortiesEntrepriseAPIView, ClientListAPIView, EntresEntrepriseAPIView, \
-    FactureListAPIView, FactureDetailAPIView, PayerFactureAPIView
+    FactureListAPIView, FactureDetailAPIView, PayerFactureAPIView, FactureDeleteAPIView
 
 
 router = DefaultRouter()
@@ -118,6 +118,7 @@ urlpatterns = [
     path("facture/list/<uuid:entreprise_uuid>", FactureListAPIView.as_view(), name="facture-list"),
     path("facture/detail/<uuid:uuid>", FactureDetailAPIView.as_view(), name="facture-detail"),
     path("facture/payer/<uuid:uuid>", PayerFactureAPIView.as_view(), name="facture-payer"),
+    path("facture/delete/<uuid:uuid>", FactureDeleteAPIView.as_view(), name="facture-delete"),
 
     path('info_sous_cat/get', InfoSousCatView.as_view(), name="info_sous_cat"),
     path('get_utilisateur_entreprise_historique_client/<uuid:entreprise_uuid>', UtilisateurEntrepriseHistoriqueClient.as_view(), name="info_sous_cat"),
