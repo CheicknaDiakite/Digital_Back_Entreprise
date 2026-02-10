@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from rest_framework import serializers
 
 from utilisateur.models import Licence, Utilisateur
-from .models import Categorie, Entreprise, Depense, Sortie, Client, SousCategorie, Entrer
+from .models import Categorie, Entreprise, Depense, Sortie, Client, SousCategorie, Entrer, Facture
 
 
 class EntrepriseSerializer(serializers.ModelSerializer):
@@ -135,31 +135,6 @@ class SortieSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'uuid', 'slug', 'created_at']
 
 
-class ClientSerializer(serializers.ModelSerializer):
-    # date = serializers.DateTimeField(source='created_at', format='%Y-%m-%d')
-
-    class Meta:
-        model = Client
-        fields = [
-            'uuid', 'id', 'nom', 'adresse', 'role', 'coordonne',
-            'numero', 'libelle', 'email'
-        ]
-        read_only_fields = ["uuid", "slug", 'id']
-
-
-class DepenseSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Depense
-        fields = "__all__"
-
-
-class CategorieSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Categorie
-        fields = ["uuid", "libelle", "image", "entreprise", "slug", "created_at"]
-        read_only_fields = ["uuid", "slug", "created_at"]
-
-
 class SortieEntrepriseSerializer(serializers.ModelSerializer):
     categorie_libelle = serializers.CharField(source="entrer.souscategorie.libelle", read_only=True)
     client = serializers.CharField(source="client.nom", allow_null=True, read_only=True)
@@ -179,6 +154,43 @@ class SortieEntrepriseSerializer(serializers.ModelSerializer):
         if obj.entrer.souscategorie.image:
             return obj.entrer.souscategorie.image.url
         return None
+
+
+class FactureSerializer(serializers.ModelSerializer):
+    client_nom = serializers.CharField(source='client.nom', read_only=True)
+    entreprise_nom = serializers.CharField(source='entreprise.nom', read_only=True)
+    created_by_nom = serializers.CharField(source='created_by.username', read_only=True)
+    reste_a_payer = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    sorties = SortieEntrepriseSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Facture
+        fields = [
+            'id', 'uuid', 'code', 'entreprise', 'entreprise_nom', 'client', 'client_nom',
+            'montant_total', 'montant_remise', 'montant_paye', 'reste_a_payer',
+            'est_solde', 'created_by', 'created_by_nom', 'created_at', 'updated_at',
+            'sorties'
+        ]
+        read_only_fields = ['id', 'uuid', 'code', 'created_at', 'updated_at', 'reste_a_payer']
+
+class ClientSerializer(serializers.ModelSerializer):
+    # date = serializers.DateTimeField(source='created_at', format='%Y-%m-%d')
+
+    class Meta:
+        model = Client
+        fields = [
+            'uuid', 'id', 'nom', 'adresse', 'role', 'coordonne',
+            'numero', 'libelle', 'email'
+        ]
+        read_only_fields = ["uuid", "slug", 'id']
+
+
+class CategorieSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categorie
+        fields = ["uuid", "libelle", "image", "entreprise", "slug", "created_at"]
+        read_only_fields = ["uuid", "slug", "created_at"]
+
 
 class DepenseSerializer(serializers.ModelSerializer):
     class Meta:

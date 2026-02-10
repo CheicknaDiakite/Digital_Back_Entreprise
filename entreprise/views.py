@@ -26,7 +26,7 @@ from rest_framework.views import APIView
 from fonction import token_required
 
 from .models import Entreprise, Categorie, SousCategorie, Entrer, Sortie, FactSortie, Depense, FactEntre, \
-    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise, Avi
+    HistoriqueEntrer, HistoriqueSortie, Client, PaiementEntreprise, Avi, Facture
 from utilisateur.models import Utilisateur, Licence
 
 # from root.outil import get_order_id
@@ -3460,11 +3460,81 @@ def update_sorties(request):
             return JsonResponse({"message": "Aucun ID valide fourni", "etat": False}, status=400)
 
         remise_code = str(uuid.uuid4())
-        updated_count = Sortie.objects.filter(id__in=sortie_ids).update(is_remise=True, remise_code=remise_code)
-        return JsonResponse({
-            "message": f"{updated_count} enregistrements mis à jour.",
-            "etat": True
-        })
+        
+        # Récupérer les sorties concernées
+        sorties = Sortie.objects.filter(id__in=sortie_ids)
+        if not sorties.exists():
+            return JsonResponse({"message": "Aucune sortie trouvée pour les IDs fournis", "etat": False}, status=404)
+
+        # Calculer les totaux
+        total_initial = sum(s.prix_total for s in sorties)
+        
+        # Récupérer les infos de la requette
+        remise_montant = data.get("remise_montant", 0)
+        client_name = data.get("client_name", "")
+        code = data.get("code", "")
+        client_id = data.get("client_id")
+        montant_paye = data.get("montant_paye", 0)
+        montant_total_front = data.get("montant_total", total_initial)
+        is_remise = data.get("is_remise", False)
+        
+        try:
+            remise_montant = float(remise_montant)
+        except (ValueError, TypeError):
+            remise_montant = 0
+            
+        try:
+            montant_paye = float(montant_paye)
+        except (ValueError, TypeError):
+            montant_paye = 0
+
+        try:
+            montant_total = float(montant_total_front)
+        except (ValueError, TypeError):
+            montant_total = total_initial
+
+        # Création de la facture
+        try:
+            entreprise = sorties.first().entrer.souscategorie.categorie.entreprise
+            
+            client = None
+            if client_id:
+                client = Client.objects.filter(uuid=client_id).first()
+            
+            facture = Facture.objects.create(
+                code=code,
+                entreprise=entreprise,
+                client=client,
+                montant_total=montant_total, # Le total après remise ou le total initial
+                montant_remise=remise_montant,
+                montant_paye=montant_paye,
+                created_by=request.user
+            )
+            
+            # Mise à jour des sorties
+            updated_count = sorties.update(
+                is_remise=is_remise, 
+                remise_code=remise_code,
+                facture=facture
+            )
+            
+            # Mise à jour du statut de la facture (calcul du reste à payer initial)
+            facture.update_status()
+            
+            return JsonResponse({
+                "message": f"{updated_count} enregistrements mis à jour et facture créée.",
+                "etat": True,
+                "facture_uuid": facture.uuid
+            })
+            
+        except Exception as e:
+            print(f"Erreur lors de la création de la facture: {e}")
+            # Fallback si erreur facture: on met juste à jour is_remise comme avant
+            updated_count = sorties.update(is_remise=True, remise_code=remise_code)
+            return JsonResponse({
+                "message": f"{updated_count} enregistrements mis à jour (Erreur Facture: {str(e)})",
+                "etat": True
+            })
 
     return JsonResponse({"message": "Méthode non autorisée", "etat": False}, status=405)
 

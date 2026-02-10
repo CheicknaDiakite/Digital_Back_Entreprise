@@ -352,6 +352,44 @@ class HistoriqueEntrer(models.Model):
         return f"{date_str}{random_str}"
 
 
+class Facture(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    entreprise = models.ForeignKey(Entreprise, on_delete=models.CASCADE)
+    client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    code = models.CharField(max_length=50, unique=True)
+    date = models.DateTimeField(auto_now_add=True)
+    
+    montant_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    montant_remise = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    montant_paye = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    
+    est_solde = models.BooleanField(default=False)
+    
+    created_by = models.ForeignKey(Utilisateur, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Facture {self.code}"
+
+    @property
+    def reste_a_payer(self):
+        return self.montant_total - self.montant_paye
+
+    def update_status(self):
+        if self.reste_a_payer <= 0:
+            self.est_solde = True
+        else:
+            self.est_solde = False
+        self.save()
+
+    def save(self, *args, **kwargs):
+        if self.reste_a_payer <= 0:
+            self.est_solde = True
+        super().save(*args, **kwargs)
+
+
 class Sortie(models.Model):
     created_by = models.ForeignKey(
         Utilisateur,
@@ -371,6 +409,9 @@ class Sortie(models.Model):
 
     is_remise = models.BooleanField(default=False, null=False, blank=False)
     remise_code = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Lien vers la facture (optionnel au début, à peupler lors de la création de la facture)
+    facture = models.ForeignKey(Facture, on_delete=models.SET_NULL, null=True, blank=True, related_name='sorties')
 
     slug = models.SlugField(editable=False, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)

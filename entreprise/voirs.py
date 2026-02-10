@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db.models import Sum, F, Count
 from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
@@ -10,9 +11,9 @@ from rest_framework import serializers
 from rest_framework.views import APIView
 
 from utilisateur.models import Utilisateur
-from .models import Categorie, Entreprise, Sortie, Entrer, SousCategorie, Depense, Client
+from .models import Categorie, Entreprise, Sortie, Entrer, SousCategorie, Depense, Client, Facture
 from .serializers import CategorieSerializer, EntrepriseDetailSerializer, DepenseSerializer, SortieEntrepriseSerializer, \
-    ClientSerializer
+    ClientSerializer, FactureSerializer, SortieSerializer
 
 
 class CategorieListCreateView(generics.ListCreateAPIView):
@@ -685,3 +686,143 @@ class ClientListAPIView(APIView):
             "message": "Clients récupérés avec succès",
             "donnee": serializer.data
         }, status=status.HTTP_200_OK)
+
+
+class FactureListAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, entreprise_uuid):
+        entreprise = get_object_or_404(Entreprise, uuid=entreprise_uuid)
+        factures = Facture.objects.filter(entreprise=entreprise).order_by('-created_at')
+        
+        # Filtres optionnels
+        client_uuid = request.query_params.get('client_uuid')
+        if client_uuid:
+            factures = factures.filter(client__uuid=client_uuid)
+            
+        est_solde = request.query_params.get('est_solde')
+        if est_solde is not None:
+             is_solde = est_solde.lower() in ['true', '1', 'yes']
+             factures = factures.filter(est_solde=is_solde)
+
+        serializer = FactureSerializer(factures, many=True)
+        return Response({
+            "etat": True,
+            "message": "Factures récupérées avec succès",
+            "donnee": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class FactureDetailAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, uuid):
+        facture = get_object_or_404(Facture, uuid=uuid)
+        serializer = FactureSerializer(facture)
+        return Response({
+            "etat": True,
+            "message": "Facture récupérée avec succès",
+            "donnee": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class PayerFactureAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, uuid):
+        facture = get_object_or_404(Facture, uuid=uuid)
+        montant = request.data.get('montant')
+
+        if not montant:
+            return Response({
+                "etat": False,
+                "message": "Le montant est obligatoire"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            montant = Decimal(str(montant))
+        except (ValueError, TypeError, Exception):
+            return Response({
+                "etat": False,
+                "message": "Montant invalide"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if montant <= 0:
+             return Response({
+                "etat": False,
+                "message": "Le montant doit être positif"
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        if montant > facture.reste_a_payer:
+             return Response({
+                "etat": False,
+                "message": f"Le montant ne peut pas dépasser le reste à payer ({facture.reste_a_payer})"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        facture.montant_paye = facture.montant_paye + montant
+        facture.save()
+
+        return Response({
+            "etat": True,
+            "message": "Paiement enregistré avec succès",
+            "donnee": FactureSerializer(facture).data
+        }, status=status.HTTP_200_OK)
+
+
+class SortieCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = SortieSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                sortie = serializer.save()
+                
+                # Gestion automatique de la facture
+                if sortie.remise_code:
+                    try:
+                        entreprise = sortie.entrer.souscategorie.categorie.entreprise
+                        facture, created = Facture.objects.get_or_create(
+                            code=sortie.remise_code,
+                            entreprise=entreprise,
+                            defaults={
+                                'client': sortie.client,
+                                'created_by': request.user
+                            }
+                        )
+                        
+                        # Lier la sortie à la facture
+                        sortie.facture = facture
+                        sortie.save()
+                        
+                        # Recalculer les totaux de la facture
+                        sorties_liees = Sortie.objects.filter(facture=facture)
+                        total = sum(s.prix_total for s in sorties_liees)
+                        
+                        # Mise à jour de la facture
+                        facture.montant_total = total
+                        # On pourrait aussi gérer la remise globale ici si elle est stockée quelque part
+                        # Pour l'instant on suppose que montant_remise est 0 ou géré ailleurs
+                        
+                        # Calcul du reste à payer
+                        facture.update_status() # Sauvegarde incluse dans update_status
+                        
+                    except Exception as e:
+                        print(f"Erreur lors de la création/mise à jour de la facture: {e}")
+                        # On ne bloque pas la création de la sortie pour autant, mais on log l'erreur
+
+                return Response({
+                    "etat": True,
+                    "message": "Sortie ajoutée avec succès",
+                    "donnee": SortieSerializer(sortie).data
+                }, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({
+                    "etat": False,
+                    "message": str(e)
+                }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "etat": False,
+            "message": "Erreur de validation",
+            "erreurs": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
