@@ -3262,80 +3262,151 @@ def get_entrers_entreprise(request, uuid, entreprise_id):
 class SortieCreateView(APIView):
     def post(self, request):
         data = request.data
-
-        qte = float(data.get("qte", 0))
-        unite = data.get("unite", "kilos")
-        pu = data.get("pu")
         admin = request.user
-        entrer_id = data.get("entre_id")
-        client_id = data.get("client_id")
 
         # Vérification admin
         if not admin or not admin.groups.filter(name__in=["Admin", "Editor", "Author"]).exists():
             return Response({'etat': False, 'message': "Permission refusée"},
                             status=status.HTTP_403_FORBIDDEN)
 
-        # Vérification entrée
-        entrer = Entrer.objects.filter(uuid=entrer_id).first()
-        if not entrer:
-            return Response({'etat': False, 'message': "Entrée non trouvée"},
-                            status=status.HTTP_404_NOT_FOUND)
-
-        # Vérification stock
-        if Decimal(str(entrer.qte)) - Decimal(str(qte)) < 0:
-            return Response({'etat': False, 'message': "Stock insuffisant"},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Création sortie
-        sortie = Sortie(
-            qte=qte,
-            unite=unite,
-            pu=pu,
-            entrer=entrer,
-            created_by=admin
-        )
-
-        # Client (optionnel)
-        if client_id:
+        # Si les données sont une liste, on traite en masse
+        if isinstance(data, list):
+            from django.db import transaction
             try:
-                client_uuid = uuid.UUID(client_id)
-            except ValueError:
-                return Response({'etat': False, 'message': "Client non valide"},
+                with transaction.atomic():
+                    created_sorties = []
+                    for item in data:
+                        qte = float(item.get("qte", 0))
+                        unite = item.get("unite", "kilos")
+                        pu = item.get("pu")
+                        entrer_id = item.get("entre_id")
+                        client_id = item.get("client_id")
+
+                        # Vérification entrée
+                        entrer = Entrer.objects.filter(uuid=entrer_id).first()
+                        if not entrer:
+                            raise Exception(f"Entrée {entrer_id} non trouvée")
+
+                        # Vérification stock
+                        if Decimal(str(entrer.qte)) - Decimal(str(qte)) < 0:
+                            raise Exception(f"Stock insuffisant pour {entrer.libelle}")
+
+                        # Création sortie
+                        sortie = Sortie(
+                            qte=qte,
+                            unite=unite,
+                            pu=pu,
+                            entrer=entrer,
+                            created_by=admin
+                        )
+
+                        # Client (optionnel)
+                        if client_id:
+                            client = Client.objects.filter(uuid=client_id).first()
+                            if client:
+                                sortie.client = client
+
+                        # Enregistrer la sortie
+                        sortie.save()
+
+                        # 🔥 Mise à jour stock
+                        entrer.qte = Decimal(str(entrer.qte)) - Decimal(str(qte))
+                        entrer.save()
+
+                        # 🔥 Enregistrer HistoriqueSortie
+                        HistoriqueSortie.objects.create(
+                            sortie=sortie,
+                            ref=sortie.ref,
+                            qte=sortie.qte,
+                            unite=sortie.unite,
+                            pu=sortie.pu,
+                            action="created",
+                            libelle=f"Produit sorti par {admin.first_name} {admin.last_name}",
+                            categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
+                            utilisateur=admin,
+                            entreprise=admin.entreprise if hasattr(admin, "entreprise") else None
+                        )
+                        created_sorties.append(sortie)
+
+                    serializer = SortieSerializer(created_sorties, many=True)
+                    return Response({
+                        "etat": True,
+                        "message": f"{len(created_sorties)} produits sortis avec succès.",
+                        "donnee": serializer.data
+                    }, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({'etat': False, 'message': str(e)},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            client = Client.objects.filter(uuid=client_uuid).first()
-            if not client:
-                return Response({'etat': False, 'message': "Client non trouvé"},
+        # Sinon (si c'est un seul objet), on garde l'ancienne logique
+        else:
+            qte = float(data.get("qte", 0))
+            unite = data.get("unite", "kilos")
+            pu = data.get("pu")
+            entrer_id = data.get("entre_id")
+            client_id = data.get("client_id")
+
+            # Vérification entrée
+            entrer = Entrer.objects.filter(uuid=entrer_id).first()
+            if not entrer:
+                return Response({'etat': False, 'message': "Entrée non trouvée"},
                                 status=status.HTTP_404_NOT_FOUND)
-            sortie.client = client
 
-        # Enregistrer la sortie
-        sortie.save()
+            # Vérification stock
+            if Decimal(str(entrer.qte)) - Decimal(str(qte)) < 0:
+                return Response({'etat': False, 'message': "Stock insuffisant"},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-        # 🔥 Mise à jour stock
-        entrer.qte = Decimal(str(entrer.qte)) - Decimal(str(qte))
-        entrer.save()
+            # Création sortie
+            sortie = Sortie(
+                qte=qte,
+                unite=unite,
+                pu=pu,
+                entrer=entrer,
+                created_by=admin
+            )
 
-        # 🔥 Enregistrer HistoriqueSortie
-        HistoriqueSortie.objects.create(
-            sortie=sortie,
-            ref=sortie.ref,
-            qte=sortie.qte,
-            unite=sortie.unite,
-            pu=sortie.pu,
-            action="created",
-            libelle=f"Produit sorti par {admin.first_name} {admin.last_name}",
-            categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
-            utilisateur=admin,
-            entreprise=admin.entreprise if hasattr(admin, "entreprise") else None
-        )
+            # Client (optionnel)
+            if client_id:
+                try:
+                    client_uuid = uuid.UUID(client_id)
+                except ValueError:
+                    return Response({'etat': False, 'message': "Client non valide"},
+                                    status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = SortieSerializer(sortie)
-        return Response({
-            "etat": True,
-            "message": "success",
-            "donnee": serializer.data
-        }, status=status.HTTP_201_CREATED)
+                client = Client.objects.filter(uuid=client_uuid).first()
+                if not client:
+                    return Response({'etat': False, 'message': "Client non trouvé"},
+                                    status=status.HTTP_404_NOT_FOUND)
+                sortie.client = client
+
+            # Enregistrer la sortie
+            sortie.save()
+
+            # 🔥 Mise à jour stock
+            entrer.qte = Decimal(str(entrer.qte)) - Decimal(str(qte))
+            entrer.save()
+
+            # 🔥 Enregistrer HistoriqueSortie
+            HistoriqueSortie.objects.create(
+                sortie=sortie,
+                ref=sortie.ref,
+                qte=sortie.qte,
+                unite=sortie.unite,
+                pu=sortie.pu,
+                action="created",
+                libelle=f"Produit sorti par {admin.first_name} {admin.last_name}",
+                categorie=f"{entrer.souscategorie.libelle} ({entrer.libelle})",
+                utilisateur=admin,
+                entreprise=admin.entreprise if hasattr(admin, "entreprise") else None
+            )
+
+            serializer = SortieSerializer(sortie)
+            return Response({
+                "etat": True,
+                "message": "success",
+                "donnee": serializer.data
+            }, status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
